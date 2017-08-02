@@ -9,22 +9,21 @@ import com.amazonaws.services.s3.transfer.*;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Date;
-import java.util.List;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.util.*;
 
 public class Main {
 
     public static void main(String[] args) throws IOException {
 
         AmazonS3ClientBuilder s3 = AmazonS3ClientBuilder.standard();
-        String bucketName = "discovery-tpp-inbound";
-        String localDataDirectory = "c:\\temp\\data";
-        String awsDataDirectory = "data";
+        String bucketName = "discovery-ftp";
+        String localDataDirectory = "c:\\discovery-ftp\\tpp\\data";
+        String awsDataDirectory = "tpp/data";
 
         System.out.println("===========================================");
-        System.out.println("       Discovery TPP Data Uploader         ");
+        System.out.println("     Discovery TPP Data File Uploader      ");
         System.out.println("===========================================\n");
 
         try {
@@ -50,38 +49,89 @@ public class Main {
         } catch (InterruptedException ie) {
             System.out.println("Caught an InterruptedException: " + ie.getMessage());
             System.exit(-1);
+        } catch (IOException io) {
+            System.out.println("Caught an IOException: "+io.getMessage());
+            System.exit(-1);
         }
     }
 
-    private static void UploadDataFiles(AmazonS3 s3, String localDataDirectory, String bucketName, String awsDataDirectory) throws SdkBaseException, InterruptedException
+    //Use the AWS transfer manager to async the data files to S3
+    private static void UploadDataFiles(AmazonS3 s3, String localDataDirectory, String bucketName, String awsDataDirectory) throws SdkBaseException, InterruptedException, IOException
     {
-        System.out.println("Checking for data upload files......\n");
-
         TransferManagerBuilder tx = TransferManagerBuilder.standard().withS3Client(s3);
         try {
-            MultipleFileUpload mfu = tx.build().uploadDirectory(bucketName, awsDataDirectory, new File(localDataDirectory), true);
+            List<File> filesToUpload = new LinkedList<File>();
+            File localDataDir = new File(localDataDirectory);
+            System.out.println("Checking for data upload files......\n");
+            int uploadFileCount = getUploadFileList (localDataDir, filesToUpload);
+            if (uploadFileCount > 0) {
+                System.out.println(uploadFileCount+" data upload files found: \n");
+                printUploadFiles (filesToUpload);
 
-            showMultiUploadProgress(mfu);
-            mfu.waitForCompletion();
+                MultipleFileUpload mfu = tx.build().uploadFileList(bucketName, awsDataDirectory, localDataDir, filesToUpload);
+                showMultiUploadProgress(mfu);
+                mfu.waitForCompletion();
 
-            System.out.println("\nTransfer completed at " + new Date().toString() + "\n");
-
-            //TODO: If successful, delete/move source files?
+                archiveLocalDataFiles(filesToUpload);
+                System.out.println("Transfer completed at " + new Date().toString() + "\n");
+            }
+            else
+                System.out.println("0 data upload files found.\n");
         }
         finally {
             tx.build().shutdownNow();
         }
     }
 
-    // Prints progress of a multiple file upload while waiting for it to finish.
-    // Simple output to the console or you could log progress elsewhere
+    //Get all files and sub-folders in the local Data directory for uploading, excluding the Archived folder
+    private static int getUploadFileList (File localDataDir, List<File> results)
+    {
+        File[] filesFound = localDataDir.listFiles();
+        if(filesFound != null) {
+            for (File f: filesFound) {
+                if(f.isDirectory()) {
+                    if (!f.getName().equalsIgnoreCase("archived")) {
+                        getUploadFileList(f, results);
+                    }
+                }
+                else {
+                    results.add(f);
+                }
+            }
+            return results.size();
+        }
+        return 0;
+    }
+
+    //Move the uploaded files to Archive folder inline with TPP specification configuration
+    private static void archiveLocalDataFiles(List<File> filesUploaded) throws IOException
+    {
+        for (File file: filesUploaded) {
+            //Check if the batch Archived directory exists for the file, else create
+            String archivedFilePath = file.getPath().replace("\\data\\","\\data\\Archived\\");
+            String batchArchivedDir = archivedFilePath.substring(0, archivedFilePath.lastIndexOf("\\"));
+            File batchArchivedDirectory = new File(batchArchivedDir);
+            if (!Files.exists(batchArchivedDirectory.toPath()))
+                Files.createDirectories(batchArchivedDirectory.toPath());
+
+            //Move the uploaded file to the Archived folder
+            File archivedFile = new File(archivedFilePath);
+            Files.move(file.toPath(), archivedFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+
+            //Check source directory is empty, then delete directory
+            String batchSourceDir = file.getPath().substring(0, file.getPath().lastIndexOf("\\"));
+            File batchSourceDirecory = new File(batchSourceDir);
+            if (batchSourceDirecory.isDirectory() && batchSourceDirecory.list().length == 0)
+                if (!batchSourceDirecory.delete())
+                    throw new IOException (String.format("Failed to delete directory: %s", batchSourceDir));
+        }
+    }
+
+    // Shows progress of a multiple file upload while waiting for it to finish.
     private static void showMultiUploadProgress(MultipleFileUpload mfu)
     {
         Collection<? extends Upload> subTransfers = mfu.getSubTransfers();
         List <String> doneTransfer = new ArrayList<String>();
-
-        printUploadFiles(subTransfers);
-
         System.out.println("Transfer started at " + new Date().toString() + "\n");
         while (!mfu.isDone()) {
             for (Upload u : subTransfers) {
@@ -107,13 +157,12 @@ public class Main {
 
         // The final state of the transfer. Log this?
         Transfer.TransferState finalTransferState = mfu.getState();
+        System.out.println();
     }
 
-    // prints a simple text progressbar: [#####     ]
+    // Prints a simple text progressbar
     private static void printProgressBar(double pct)
     {
-        // if bar_size changes, then change erase_bar (in eraseProgressBar) to
-        // match.
         final int bar_size = 40;
         final String empty_bar = "                                        ";
         final String filled_bar = "########################################";
@@ -123,12 +172,12 @@ public class Main {
                 empty_bar.substring(0, bar_size - amt_full), pct);
     }
 
-    private static void printUploadFiles(Collection<? extends Upload> subTransfers)
+    //Print the list of files to upload to the console
+    private static void printUploadFiles(List<File> filesToUpload)
     {
         StringBuilder sb = new StringBuilder();
-        for (Upload u : subTransfers) {
-            String uploadDescription = u.getDescription();
-            sb.append(getTransferFilePath(uploadDescription)).append("\n");
+        for (File f : filesToUpload) {
+            sb.append(f.getPath()).append("\n");
         }
         System.out.println(sb.toString());
     }

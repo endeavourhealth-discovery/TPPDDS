@@ -22,9 +22,9 @@ public class Main {
     public static void main(String[] args) throws IOException {
 
         AmazonS3ClientBuilder s3 = AmazonS3ClientBuilder.standard();
-        String bucketName = "discovery-tpp-inbound";
-        String localWorkingDirectory = "c:\\TPPDDS";
-        String awsPatchDirectory = "patch";
+        String bucketName = "discovery-ftp";
+        String localWorkingDirectory = "c:\\discovery-ftp";
+        String awsPatchDirectory = "tpp/patch";
 
         System.out.println("===========================================");
         System.out.println("          Discovery TPP Patcher            ");
@@ -55,7 +55,7 @@ public class Main {
         } catch (IOException io) {
             System.out.println("Caught an IOException: "+io.getMessage());
             System.exit(-1);
-    }
+        }
     }
 
     private static void CheckForPatchUpdates(AmazonS3 s3, String awsPatchDirectory, String bucketName, String localWorkingDirectory) throws SdkBaseException, InterruptedException, IOException
@@ -66,37 +66,43 @@ public class Main {
         lor.setBucketName(bucketName);
         lor.setPrefix(awsPatchDirectory);
         ObjectListing ol = s3.listObjects(lor);
-        List<S3ObjectSummary> patchFiles = ol.getObjectSummaries();    //returns directory name and any files, so 1+ results = patch available
+        //Returns the S3 directory(key) name and any files, so 1+ results = patch file available
+        List<S3ObjectSummary> patchFiles = ol.getObjectSummaries();
         if (patchFiles.size()>1)
         {
-            System.out.println("Patch update available, downloading...... \n");
+            System.out.println("Patch update available, downloading......\n");
             TransferManagerBuilder tx = TransferManagerBuilder.standard().withS3Client(s3);
             try {
                 MultipleFileDownload mfd = tx.build().downloadDirectory(bucketName, awsPatchDirectory, new File(localWorkingDirectory));
                 mfd.waitForCompletion();
 
                 PatchLocalFile(localWorkingDirectory);
+                System.out.println("Patch update applied successfully.\n");
+
+                //Remove the source patch file from s3 once successfully patched
+                String patchFileKey = "tpp/patch/tpp-dds-uploader-patch.jar";
+                s3.deleteObject(bucketName, patchFileKey);
             }
             finally {
                 tx.build().shutdownNow();
             }
-
-            //TODO:If successful, delete patch files?
         }
         else {
             System.out.println("No patch update available.\n");
         }
     }
 
+    //Copy the patch file over the existing executable then delete the source file
     private static void PatchLocalFile(String localWorkingDirectory) throws IOException {
-
-        String patchFilename = localWorkingDirectory+"\\patch\\tpp-dds-uploader-patch.jar";
+        String patchFilename = localWorkingDirectory+"\\tpp\\patch\\tpp-dds-uploader-patch.jar";
         File patchFile = new File(patchFilename);
         if (Files.exists(patchFile.toPath()))
         {
             String existingFilename = localWorkingDirectory + "\\bin\\tpp-dds-uploader.jar";
             File existingFile = new File(existingFilename);
+
             Files.copy(patchFile.toPath(), existingFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            Files.delete(patchFile.toPath());
         }
         else
         {
