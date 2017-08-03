@@ -20,9 +20,8 @@ import java.util.List;
 public class Main {
 
     public static void main(String[] args) throws IOException {
-
         AmazonS3ClientBuilder s3 = AmazonS3ClientBuilder.standard();
-        String bucketName = "discovery-ftp";
+        String awsBucketName = args[0];
         String localWorkingDirectory = "c:\\discovery-ftp";
         String awsPatchDirectory = "tpp/patch";
 
@@ -31,7 +30,7 @@ public class Main {
         System.out.println("===========================================\n");
 
         try {
-            CheckForPatchUpdates(s3.build(),awsPatchDirectory, bucketName, localWorkingDirectory);
+            CheckForPatchUpdates(s3.build(),awsPatchDirectory, awsBucketName, localWorkingDirectory);
             System.exit(0);
 
         } catch (AmazonServiceException ase) {
@@ -58,12 +57,12 @@ public class Main {
         }
     }
 
-    private static void CheckForPatchUpdates(AmazonS3 s3, String awsPatchDirectory, String bucketName, String localWorkingDirectory) throws SdkBaseException, InterruptedException, IOException
+    private static void CheckForPatchUpdates(AmazonS3 s3, String awsPatchDirectory, String awsBucketName, String localWorkingDirectory) throws SdkBaseException, InterruptedException, IOException
     {
         System.out.println("Checking for patch updates......\n");
 
         ListObjectsRequest lor = new ListObjectsRequest();
-        lor.setBucketName(bucketName);
+        lor.setBucketName(awsBucketName);
         lor.setPrefix(awsPatchDirectory);
         ObjectListing ol = s3.listObjects(lor);
         //Returns the S3 directory(key) name and any files, so 1+ results = patch file available
@@ -73,7 +72,7 @@ public class Main {
             System.out.println("Patch update available, downloading......\n");
             TransferManagerBuilder tx = TransferManagerBuilder.standard().withS3Client(s3);
             try {
-                MultipleFileDownload mfd = tx.build().downloadDirectory(bucketName, awsPatchDirectory, new File(localWorkingDirectory));
+                MultipleFileDownload mfd = tx.build().downloadDirectory(awsBucketName, awsPatchDirectory, new File(localWorkingDirectory));
                 mfd.waitForCompletion();
 
                 PatchLocalFile(localWorkingDirectory);
@@ -81,7 +80,7 @@ public class Main {
 
                 //Remove the source patch file from s3 once successfully patched
                 String patchFileKey = "tpp/patch/tpp-dds-uploader-patch.jar";
-                s3.deleteObject(bucketName, patchFileKey);
+                s3.deleteObject(awsBucketName, patchFileKey);
             }
             finally {
                 tx.build().shutdownNow();

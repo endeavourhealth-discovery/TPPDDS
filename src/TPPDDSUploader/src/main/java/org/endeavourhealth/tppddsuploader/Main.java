@@ -18,7 +18,7 @@ public class Main {
     public static void main(String[] args) throws IOException {
 
         AmazonS3ClientBuilder s3 = AmazonS3ClientBuilder.standard();
-        String bucketName = "discovery-ftp";
+        String awsBucketName = args[0];
         String localDataDirectory = "c:\\discovery-ftp\\tpp\\data";
         String awsDataDirectory = "tpp/data";
 
@@ -28,7 +28,7 @@ public class Main {
 
         try {
             //Check for data files in <localDataDirectory> X and upload contents (including sub directories) to S3
-            UploadDataFiles(s3.build(), localDataDirectory, bucketName, awsDataDirectory);
+            UploadDataFiles(s3.build(), localDataDirectory, awsBucketName, awsDataDirectory);
             System.exit(0);
 
         } catch (AmazonServiceException ase) {
@@ -56,7 +56,7 @@ public class Main {
     }
 
     //Use the AWS transfer manager to async the data files to S3
-    private static void UploadDataFiles(AmazonS3 s3, String localDataDirectory, String bucketName, String awsDataDirectory) throws SdkBaseException, InterruptedException, IOException
+    private static void UploadDataFiles(AmazonS3 s3, String localDataDirectory, String awsBucketName, String awsDataDirectory) throws SdkBaseException, InterruptedException, IOException
     {
         TransferManagerBuilder tx = TransferManagerBuilder.standard().withS3Client(s3);
         try {
@@ -68,7 +68,7 @@ public class Main {
                 System.out.println(uploadFileCount+" data upload files found: \n");
                 printUploadFiles (filesToUpload);
 
-                MultipleFileUpload mfu = tx.build().uploadFileList(bucketName, awsDataDirectory, localDataDir, filesToUpload);
+                MultipleFileUpload mfu = tx.build().uploadFileList(awsBucketName, awsDataDirectory, localDataDir, filesToUpload);
                 showMultiUploadProgress(mfu);
                 mfu.waitForCompletion();
 
