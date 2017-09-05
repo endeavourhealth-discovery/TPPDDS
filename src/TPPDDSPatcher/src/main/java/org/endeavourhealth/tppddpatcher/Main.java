@@ -10,6 +10,8 @@ import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.amazonaws.services.s3.transfer.MultipleFileDownload;
 import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -19,15 +21,18 @@ import java.util.List;
 
 public class Main {
 
+    private static final Logger LOG = LoggerFactory.getLogger(Main.class);
+    private static final String APPLICATION_NAME = "Discovery Data File Uploader Patcher";
+
     public static void main(String[] args) throws IOException {
         AmazonS3ClientBuilder s3 = AmazonS3ClientBuilder.standard();
         String awsBucketName = args[0];
         String localWorkingDirectory = "c:\\discovery-ftp";
         String awsPatchDirectory = "tpp/patch";
 
-        System.out.println("===========================================");
-        System.out.println("          Discovery TPP Patcher            ");
-        System.out.println("===========================================\n");
+        System.out.println("==========================================");
+        System.out.println("   "+APPLICATION_NAME+"                    ");
+        System.out.println("==========================================\n");
 
         try {
             CheckForPatchUpdates(s3.build(),awsPatchDirectory, awsBucketName, localWorkingDirectory);

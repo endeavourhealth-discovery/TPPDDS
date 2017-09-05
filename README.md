@@ -1,7 +1,7 @@
-### Discovery Data Service - data uploader for TPP clients
+### Discovery Data Service - data uploader for client PCs
 
 ##### [install directory]
-c:\discovery-ftp 
+Typically c:\discovery-ftp 
 
 ##### [batch file that calls into the two executable jars]
 \run-tpp-dds.bat
@@ -16,7 +16,7 @@ c:\discovery-ftp
 \patch 
 
 ##### [location of data files for upload]
-\data
+Typically c:\extract
 
 ##### [location of archived uploaded data files]
-\data\archived
+[file upload location]\archived
