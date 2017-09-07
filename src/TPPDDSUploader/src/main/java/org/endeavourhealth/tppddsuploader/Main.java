@@ -1,5 +1,8 @@
 package org.endeavourhealth.tppddsuploader;
 
+import net.lingala.zip4j.core.ZipFile;
+import net.lingala.zip4j.exception.ZipException;
+import net.lingala.zip4j.model.FileHeader;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -18,9 +21,7 @@ import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
 import java.net.Socket;
-import java.util.Date;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
 
 import static java.util.Arrays.asList;
 
@@ -54,14 +55,13 @@ public class Main {
         System.out.println("===========================================\n");
 
         // run health checks specific to org
-        if (!clientHealthChecks(orgId))
-            System.exit(-1);
+        clientHealthChecks(orgId);
 
         try {
             List<File> inputFiles = new LinkedList<File>();
             switch (mode) {
                 case DEFAULT_MODE:
-                    System.out.println("Checking for data upload files......\n");
+                    System.out.println("\nChecking for data upload files......\n");
                     getUploadFileList(new File(rootDir),inputFiles);
                     break;
                 case UI_MODE:
@@ -76,13 +76,17 @@ public class Main {
                         System.exit(0);
                     break;
                 default:
-                    System.out.println("Checking for data upload files......\n");
+                    System.out.println("\nChecking for data upload files....\n");
                     getUploadFileList(new File(rootDir),inputFiles);
                     break;
             }
 
+            // at least one file found or selected
             if (inputFiles.size() > 0) {
-                System.out.println(inputFiles.size()+" data upload files found: \n");
+
+                // check validity of upload files based on orgId
+                if (!checkValidUploadFiles(orgId, inputFiles))
+                    System.exit(-1);
 
                 // set service timeout limits
                 RequestConfig requestConfig = RequestConfig
@@ -109,7 +113,7 @@ public class Main {
                 httppost.setEntity(entityBuilder.build());
 
                 // execute the upload request
-                System.out.println("Transfer started at " + new Date().toString() + "\n");
+                System.out.println("\nTransfer started at " + new Date().toString() + "\n");
                 HttpResponse response = httpclient.execute(httppost);
 
                 int statusCode = response.getStatusLine().getStatusCode();
@@ -163,6 +167,11 @@ public class Main {
         return tempFilePath.substring(rootDir.length());
     }
 
+    private static String parseDirFilePath(File filePath)
+    {
+        return filePath.getPath().substring(0,filePath.getPath().lastIndexOf("\\"));
+    }
+
     private static void deleteSourceFiles(List<File> sourceFiles)
     {
         for (File f: sourceFiles)
@@ -186,6 +195,7 @@ public class Main {
         // TPP client application as source - check TCP ports to denote application running
         if (orgId.equalsIgnoreCase("TPP-01"))
         {
+            System.out.println("Performing TPP client checks......\n");
             try
             {
                 (new Socket("localhost", 40700)).close();
@@ -194,6 +204,7 @@ public class Main {
             catch (IOException ex1)
             {
                 System.out.println("Unable to connect to port 40700. Trying port 2135...");
+                //TODO: log this alert
                 try
                 {
                     (new Socket("localhost", 2135)).close();
@@ -201,6 +212,7 @@ public class Main {
                 }
                 catch (IOException ex2)
                 {
+                    //TODO: log this alert
                     System.out.println("Unable to connect to port 2135.  TPP client application not running.");
                     return false;
                 }
@@ -212,5 +224,95 @@ public class Main {
         }
 
         return false;
+    }
+
+    private static boolean checkValidUploadFiles(String orgId, List<File> inputFiles)
+    {
+        // TPP client application as source - check number of files and structure of main zip
+        if (orgId.equalsIgnoreCase("TPP-01"))
+        {
+            // process input files batch for checking
+            List<String> foldersChecked = new ArrayList<String>();
+            for (File f : inputFiles)
+            {
+                // we are only interested in each batch folder
+                String folder = parseDirFilePath(f);
+                if (foldersChecked.contains(folder))
+                    continue;
+
+                File fileFolder = new File(folder);
+                File [] folderFiles = fileFolder.listFiles();
+                int fileCount = folderFiles.length;
+                if (fileCount != 4)
+                {
+                    System.out.println(String.format("Invalid number of files (%d) detected in folder: %s",fileCount,folder));
+                    return false;
+                }
+                else {
+                    List<String> fileCheckArray = new ArrayList<String>(Arrays.asList("SRExtract.zip","SRManifest.csv","SRMapping.csv","SRMappingGroup.csv"));
+                    for (File df : folderFiles)
+                    {
+                        boolean validFile = fileCheckArray.contains(df.getName());
+                        if (!validFile)
+                        {
+                            System.out.println(String.format("Invalid file (%s) detected in folder: %s",df.getName(), folder));
+                            return false;
+                        }
+
+                        // validate zip file
+                        if (df.getName().equalsIgnoreCase("SRExtract.zip"))
+                        {
+                            if (!validZipFile(df))
+                            {
+                                System.out.println(String.format("Invalid Zip file (%s) detected in folder: %s ",df.getName(),folder));
+                                return false;
+                            }
+                        }
+                    }
+                }
+                foldersChecked.add(folder);
+            }
+
+            System.out.println(String.format("%d valid data upload files found in %d folders: \n", inputFiles.size(), foldersChecked.size()));
+            return true;
+        }
+        else
+        if (orgId.equalsIgnoreCase("HOM-01"))
+        {
+            return true;
+        }
+
+        return true;
+    }
+
+    private static boolean validZipFile(File zipFile)
+    {
+        try
+        {
+            ZipFile zip = new ZipFile(zipFile.getPath());
+
+            // is the zip file a valid zip?
+            if (!zip.isValidZipFile())
+                return false;
+
+            // loop through the file headers and check for rogue files
+            List fileHeaderList = zip.getFileHeaders();
+            for (int i = 0; i < fileHeaderList.size(); i++)
+            {
+                FileHeader fileHeader = (FileHeader) fileHeaderList.get(i);
+                String fileName = fileHeader.getFileName();
+                // is the file a .csv?
+                if (!fileName.contains(".csv")) {
+                    System.out.println(String.format("Invalid file (%s) detected in Zip file: %s",fileName, zipFile.getPath()));
+                    return false;
+                }
+            }
+
+        } catch (ZipException e) {
+            e.printStackTrace();
+            return false;
+        }
+
+        return true;
     }
 }
