@@ -67,7 +67,8 @@ public class Main {
                 case UI_MODE:
                     JFileChooser fileChooser = new JFileChooser();
                     fileChooser.setDialogTitle(APPLICATION_NAME + " - Choose the data files to upload...");
-                    fileChooser.setCurrentDirectory(new File(System.getProperty("user.home")));
+                    fileChooser.setCurrentDirectory(new File(rootDir));
+                    //fileChooser.setCurrentDirectory(new File(System.getProperty("user.home")));
                     fileChooser.setMultiSelectionEnabled(true);
                     int result = fileChooser.showOpenDialog(null);
                     if (result == JFileChooser.APPROVE_OPTION) {
@@ -120,10 +121,13 @@ public class Main {
                 HttpEntity responseEntity = response.getEntity();
                 String responseString = EntityUtils.toString(responseEntity, "UTF-8");
 
+                // logout the Keycloak token session when finished
+                KeycloakClient.instance().logoutSession();
+
                 // delete source files after successful upload
                 if (statusCode == 200)
                 {
-                    deleteSourceFiles(inputFiles);
+                    deleteSourceFiles(orgId, inputFiles);
                 }
 
                 System.out.println("[" + statusCode + "] " + responseString);
@@ -172,18 +176,19 @@ public class Main {
         return filePath.getPath().substring(0,filePath.getPath().lastIndexOf("\\"));
     }
 
-    private static void deleteSourceFiles(List<File> sourceFiles)
+    private static void deleteSourceFiles(String orgId, List<File> sourceFiles)
     {
-        for (File f: sourceFiles)
-        {
-            System.out.println("Delete file: "+f.getPath());
-            f.delete();
+        if (orgId.equalsIgnoreCase("TPP-01")) {
+            for (File f : sourceFiles) {
+                System.out.println("Delete file: " + f.getPath());
+                f.delete();
 
-            // check if directory is now empty and delete it
-            String fileDirPath = f.getPath().substring(0,f.getPath().indexOf(f.getName()));
-            File dir = new File(fileDirPath);
-            if (dir.isDirectory() && dir.listFiles().length == 0)
-                dir.delete();
+                // check if directory is now empty and delete it
+                String fileDirPath = f.getPath().substring(0, f.getPath().indexOf(f.getName()));
+                File dir = new File(fileDirPath);
+                if (dir.isDirectory() && dir.listFiles().length == 0)
+                    dir.delete();
+            }
         }
     }
 

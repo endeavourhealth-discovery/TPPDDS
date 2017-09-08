@@ -64,7 +64,7 @@
         <dependency>
             <groupId>org.endeavourhealth.common</groupId>
             <artifactId>security</artifactId>
-            <version>1.1-SNAPSHOT</version>
+            <version>1.2-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>org.keycloak</groupId>
