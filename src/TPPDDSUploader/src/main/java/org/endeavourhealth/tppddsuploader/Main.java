@@ -1,8 +1,5 @@
 package org.endeavourhealth.tppddsuploader;
 
-import net.lingala.zip4j.core.ZipFile;
-import net.lingala.zip4j.exception.ZipException;
-import net.lingala.zip4j.model.FileHeader;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -20,10 +17,10 @@ import org.slf4j.LoggerFactory;
 import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
-import java.net.Socket;
 import java.util.*;
 
 import static java.util.Arrays.asList;
+import static org.endeavourhealth.tppddsuploader.HelperUtils.*;
 
 public class Main {
 
@@ -59,16 +56,17 @@ public class Main {
 
         try {
             List<File> inputFiles = new LinkedList<File>();
+            List<File> inputFolders = new LinkedList<File>();
             switch (mode) {
                 case DEFAULT_MODE:
                     System.out.println("\nChecking for data upload files......\n");
-                    getUploadFileList(new File(rootDir),inputFiles);
+                    inputFolders = getUploadFileList(new File(rootDir),inputFiles);
                     break;
                 case UI_MODE:
                     JFileChooser fileChooser = new JFileChooser();
                     fileChooser.setDialogTitle(APPLICATION_NAME + " - Choose the data files to upload...");
                     fileChooser.setCurrentDirectory(new File(rootDir));
-                    //fileChooser.setCurrentDirectory(new File(System.getProperty("user.home")));
+                    inputFolders.add(new File(rootDir));
                     fileChooser.setMultiSelectionEnabled(true);
                     int result = fileChooser.showOpenDialog(null);
                     if (result == JFileChooser.APPROVE_OPTION) {
@@ -78,60 +76,66 @@ public class Main {
                     break;
                 default:
                     System.out.println("\nChecking for data upload files....\n");
-                    getUploadFileList(new File(rootDir),inputFiles);
+                    inputFolders = getUploadFileList(new File(rootDir),inputFiles);
                     break;
             }
 
-            // at least one file found or selected
+            // at least one file found or selected for uploading
             if (inputFiles.size() > 0) {
+                 //loop through each valid folder (batch)
+                 for (File inputFolder : inputFolders)
+                 {
+                    String folderName = inputFolder.getPath();
+                    ArrayList<Integer> intArray = new ArrayList<Integer>();
+                    extractFileBatchLocations(inputFiles, folderName, intArray);
 
-                // check validity of upload files based on orgId
-                if (!checkValidUploadFiles(orgId, inputFiles))
-                    System.exit(-1);
+                    // check validity of upload files based on orgId and batch
+                    if (!checkValidUploadFiles(orgId, inputFolder))
+                        continue;
 
-                // set service timeout limits
-                RequestConfig requestConfig = RequestConfig
-                        .custom()
-                        .setConnectTimeout(HTTP_REQUEST_TIMEOUT_MILLIS)
-                        .setSocketTimeout(HTTP_REQUEST_TIMEOUT_MILLIS)
-                        .setConnectionRequestTimeout(HTTP_REQUEST_TIMEOUT_MILLIS)
-                        .build();
+                     // set service timeout limits
+                    RequestConfig requestConfig = RequestConfig
+                            .custom()
+                            .setConnectTimeout(HTTP_REQUEST_TIMEOUT_MILLIS)
+                            .setSocketTimeout(HTTP_REQUEST_TIMEOUT_MILLIS)
+                            .setConnectionRequestTimeout(HTTP_REQUEST_TIMEOUT_MILLIS)
+                            .build();
+                    CloseableHttpClient httpclient = HttpClientBuilder.create().setDefaultRequestConfig(requestConfig).build();
 
-                CloseableHttpClient httpclient = HttpClientBuilder.create().setDefaultRequestConfig(requestConfig).build();
+                    // create the upload http service URL with Keycloak authorisation header
+                    String uri = UPLOAD_SERVICE_URI.concat(orgId);
+                    HttpPost httppost = new HttpPost(uri);
+                    httppost.setHeader(getKeycloakToken(key, username, password));
 
-                // create the upload http service URL with Keycloak authorisation header
-                String uri = UPLOAD_SERVICE_URI.concat(orgId);
-                HttpPost httppost = new HttpPost(uri);
-                httppost.setHeader(getKeycloakToken(key, username, password));
+                    // add each file into the upload
+                    MultipartEntityBuilder entityBuilder = MultipartEntityBuilder.create();
+                    for (File inputFile : inputFiles.subList(intArray.get(0), intArray.get(1))) {
+                        String uploadPathName = parseUploadFilePath(rootDir, inputFile);
+                        entityBuilder.addBinaryBody("file", inputFile, ContentType.APPLICATION_OCTET_STREAM, uploadPathName);
+                        System.out.println(inputFile + " added to transfer");
+                    }
+                    httppost.setEntity(entityBuilder.build());
 
-                // add each file into the upload
-                MultipartEntityBuilder entityBuilder = MultipartEntityBuilder.create();
-                for (File inputFile : inputFiles) {
-                    String uploadPathName = parseUploadFilePath(rootDir, inputFile);
-                    entityBuilder.addBinaryBody("file", inputFile, ContentType.APPLICATION_OCTET_STREAM, uploadPathName);
-                    System.out.println(inputFile+" added to transfer");
+                    // execute the upload request
+                    System.out.println("\nTransfer started at " + new Date().toString() + "\n");
+                    HttpResponse response = httpclient.execute(httppost);
+
+                    int statusCode = response.getStatusLine().getStatusCode();
+                    HttpEntity responseEntity = response.getEntity();
+                    String responseString = EntityUtils.toString(responseEntity, "UTF-8");
+
+                    // logout the Keycloak token session when finished
+                    KeycloakClient.instance().logoutSession();
+
+                    System.out.println("[" + statusCode + "] " + responseString);
+
+                    // delete source files after successful upload of the batch
+                    if (statusCode == 200) {
+                        deleteSourceFiles(orgId, inputFiles.subList(intArray.get(0),intArray.get(1)));
+                    }
+
+                    System.out.println("\nTransfer completed at " + new Date().toString() + "\n");
                 }
-                httppost.setEntity(entityBuilder.build());
-
-                // execute the upload request
-                System.out.println("\nTransfer started at " + new Date().toString() + "\n");
-                HttpResponse response = httpclient.execute(httppost);
-
-                int statusCode = response.getStatusLine().getStatusCode();
-                HttpEntity responseEntity = response.getEntity();
-                String responseString = EntityUtils.toString(responseEntity, "UTF-8");
-
-                // logout the Keycloak token session when finished
-                KeycloakClient.instance().logoutSession();
-
-                // delete source files after successful upload
-                if (statusCode == 200)
-                {
-                    deleteSourceFiles(orgId, inputFiles);
-                }
-
-                System.out.println("[" + statusCode + "] " + responseString);
-                System.out.println("\nTransfer completed at " + new Date().toString() + "\n");
             }
             else
                 System.out.println("0 data upload files found.\n");
@@ -144,180 +148,5 @@ public class Main {
     {
         KeycloakClient.init(KEYCLOAK_SERVICE_URI, "endeavour", username, password, "eds-ui");
         return KeycloakClient.instance().getAuthorizationHeader();
-    }
-
-    //Get all files and sub-folders in the local Data directory for uploading, excluding the Archived folder
-    private static int getUploadFileList (File localDataDir, List<File> results)
-    {
-        File[] filesFound = localDataDir.listFiles();
-        if(filesFound != null) {
-            for (File f: filesFound) {
-                if(f.isDirectory()) {
-                    getUploadFileList(f, results);
-                }
-                else {
-                    results.add(f);
-                }
-            }
-            return results.size();
-        }
-        return 0;
-    }
-
-    private static String parseUploadFilePath(String rootDir, File filePath)
-    {
-        // remove Archived path level and root directory from the file path.  We only want the baseline folder and filename
-        String tempFilePath = filePath.getPath().replace("Archived\\","");
-        return tempFilePath.substring(rootDir.length());
-    }
-
-    private static String parseDirFilePath(File filePath)
-    {
-        return filePath.getPath().substring(0,filePath.getPath().lastIndexOf("\\"));
-    }
-
-    private static void deleteSourceFiles(String orgId, List<File> sourceFiles)
-    {
-        if (orgId.equalsIgnoreCase("TPP-01")) {
-            for (File f : sourceFiles) {
-                System.out.println("Delete file: " + f.getPath());
-                f.delete();
-
-                // check if directory is now empty and delete it
-                String fileDirPath = f.getPath().substring(0, f.getPath().indexOf(f.getName()));
-                File dir = new File(fileDirPath);
-                if (dir.isDirectory() && dir.listFiles().length == 0)
-                    dir.delete();
-            }
-        }
-    }
-
-    private static boolean clientHealthChecks(String orgId)
-    {
-        if (orgId.isEmpty())
-            return true;
-
-        // TPP client application as source - check TCP ports to denote application running
-        if (orgId.equalsIgnoreCase("TPP-01"))
-        {
-            System.out.println("Performing TPP client checks......\n");
-            try
-            {
-                (new Socket("localhost", 40700)).close();
-                return true;
-            }
-            catch (IOException ex1)
-            {
-                System.out.println("Unable to connect to port 40700. Trying port 2135...");
-                //TODO: log this alert
-                try
-                {
-                    (new Socket("localhost", 2135)).close();
-                    return true;
-                }
-                catch (IOException ex2)
-                {
-                    //TODO: log this alert
-                    System.out.println("Unable to connect to port 2135.  TPP client application not running.");
-                    return false;
-                }
-            }
-        }
-        else
-        if (orgId.equalsIgnoreCase("HOM-01")) {
-            return false;
-        }
-
-        return false;
-    }
-
-    private static boolean checkValidUploadFiles(String orgId, List<File> inputFiles)
-    {
-        // TPP client application as source - check number of files and structure of main zip
-        if (orgId.equalsIgnoreCase("TPP-01"))
-        {
-            // process input files batch for checking
-            List<String> foldersChecked = new ArrayList<String>();
-            for (File f : inputFiles)
-            {
-                // we are only interested in each batch folder
-                String folder = parseDirFilePath(f);
-                if (foldersChecked.contains(folder))
-                    continue;
-
-                File fileFolder = new File(folder);
-                File [] folderFiles = fileFolder.listFiles();
-                int fileCount = folderFiles.length;
-                if (fileCount != 4)
-                {
-                    System.out.println(String.format("Invalid number of files (%d) detected in folder: %s",fileCount,folder));
-                    return false;
-                }
-                else {
-                    List<String> fileCheckArray = new ArrayList<String>(Arrays.asList("SRExtract.zip","SRManifest.csv","SRMapping.csv","SRMappingGroup.csv"));
-                    for (File df : folderFiles)
-                    {
-                        boolean validFile = fileCheckArray.contains(df.getName());
-                        if (!validFile)
-                        {
-                            System.out.println(String.format("Invalid file (%s) detected in folder: %s",df.getName(), folder));
-                            return false;
-                        }
-
-                        // validate zip file
-                        if (df.getName().equalsIgnoreCase("SRExtract.zip"))
-                        {
-                            if (!validZipFile(df))
-                            {
-                                System.out.println(String.format("Invalid Zip file (%s) detected in folder: %s ",df.getName(),folder));
-                                return false;
-                            }
-                        }
-                    }
-                }
-                foldersChecked.add(folder);
-            }
-
-            System.out.println(String.format("%d valid data upload files found in %d folders: \n", inputFiles.size(), foldersChecked.size()));
-            return true;
-        }
-        else
-        if (orgId.equalsIgnoreCase("HOM-01"))
-        {
-            return true;
-        }
-
-        return true;
-    }
-
-    private static boolean validZipFile(File zipFile)
-    {
-        try
-        {
-            ZipFile zip = new ZipFile(zipFile.getPath());
-
-            // is the zip file a valid zip?
-            if (!zip.isValidZipFile())
-                return false;
-
-            // loop through the file headers and check for rogue files
-            List fileHeaderList = zip.getFileHeaders();
-            for (int i = 0; i < fileHeaderList.size(); i++)
-            {
-                FileHeader fileHeader = (FileHeader) fileHeaderList.get(i);
-                String fileName = fileHeader.getFileName();
-                // is the file a .csv?
-                if (!fileName.contains(".csv")) {
-                    System.out.println(String.format("Invalid file (%s) detected in Zip file: %s",fileName, zipFile.getPath()));
-                    return false;
-                }
-            }
-
-        } catch (ZipException e) {
-            e.printStackTrace();
-            return false;
-        }
-
-        return true;
     }
 }
