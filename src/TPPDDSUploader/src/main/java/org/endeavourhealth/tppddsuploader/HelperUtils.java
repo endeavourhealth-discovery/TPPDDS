@@ -3,11 +3,14 @@ package org.endeavourhealth.tppddsuploader;
 import net.lingala.zip4j.core.ZipFile;
 import net.lingala.zip4j.exception.ZipException;
 import net.lingala.zip4j.model.FileHeader;
+import net.lingala.zip4j.model.ZipParameters;
+import net.lingala.zip4j.util.Zip4jConstants;
 
 import java.io.File;
 import java.io.FileFilter;
 import java.io.IOException;
 import java.net.Socket;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
@@ -17,7 +20,9 @@ import static java.util.Arrays.asList;
 
 class HelperUtils {
 
-    static boolean validZipFile(File zipFile)
+    private static final long ZIP_SPLIT_SIZE = 20971520;
+
+    private static boolean validZipFile(File zipFile)
     {
         try
         {
@@ -47,6 +52,79 @@ class HelperUtils {
 
         return true;
     }
+
+    static List<File> splitLargeZipFiles(List<File> inputFiles) {
+        List<File> outputFiles = new LinkedList<File>();
+        for (File f : inputFiles) {
+            if (!f.isDirectory()) {
+                if (validZipFile(f)) {
+                    try {
+                        long fileSize = Files.size(f.toPath());
+                        if (fileSize > ZIP_SPLIT_SIZE) {
+                            System.out.println("Large zip file found: " + f.getPath() + " (" + fileSize + " bytes). Extracting....");
+                            try {
+                                // extract existing large zip
+                                ZipFile inZipFile = new ZipFile(f.getPath());
+                                String fileName = f.getName();
+                                String zipFolder = f.getPath().substring(0, f.getPath().indexOf(fileName)) + "temp";
+                                inZipFile.extractAll(zipFolder);
+
+                                // delete large zip file
+                                f.delete();
+
+                                // re-zip, this time splitting into multi part
+                                System.out.println("Re-zipping files over multiple split parts....");
+                                ZipFile outZipFile = new ZipFile(f.getPath());
+                                ZipParameters parameters = new ZipParameters();
+                                parameters.setCompressionMethod(Zip4jConstants.COMP_DEFLATE);
+                                parameters.setCompressionLevel(Zip4jConstants.DEFLATE_LEVEL_NORMAL);
+                                parameters.setIncludeRootFolder(false);
+                                outZipFile.createZipFileFromFolder(zipFolder, parameters, true, ZIP_SPLIT_SIZE);
+
+                                // get the array of new zip parts, convert to File and add to output
+                                ArrayList<String> zipFileParts = outZipFile.getSplitZipFiles();
+                                for (String fileStr: zipFileParts) {
+                                    if (fileStr.contains(".z010"))
+                                        fileStr = fileStr.replace(".z010",".z10");  // source lib bug
+                                    outputFiles.add(new File(fileStr));
+                                }
+
+                                // remove source files
+                                DeleteDirectory(zipFolder);
+                            } catch (Exception ex) {
+                                ex.printStackTrace();
+                            }
+                        }
+                        else{
+                            outputFiles.add(f);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        ex.printStackTrace();
+                    }
+                }
+                else{
+                    outputFiles.add(f);
+                }
+            }
+        }
+        return outputFiles;
+    }
+
+    static void DeleteDirectory(String directory)
+    {
+        File[] files = new File(directory).listFiles();
+        for (File f: files) {
+            if (f.isDirectory())
+                DeleteDirectory(f.getPath());
+            else
+                f.delete();
+        }
+
+        new File(directory).delete();
+    }
+
 
     static void extractFileBatchLocations(List<File> inputFiles , String folderName, ArrayList<Integer> intArray)
     {
@@ -83,7 +161,9 @@ class HelperUtils {
         if(archivedFoldersFound != null) {
             for (File f : archivedFoldersFound) {
                 if (f.isDirectory() && f.listFiles()!= null) {
-                    results.addAll(asList(f.listFiles()));
+                    //splitLargeZipFiles(asList(f.listFiles()));
+
+                    results.addAll(splitLargeZipFiles(asList(f.listFiles())));
                     fileBatch.add(f);
                 }
             }
@@ -98,7 +178,7 @@ class HelperUtils {
         if(filesFound != null) {
             for (File f: filesFound) {
                 if(f.isDirectory() && f.listFiles()!= null) {
-                    results.addAll(asList(f.listFiles()));
+                    results.addAll(splitLargeZipFiles(asList(f.listFiles())));
                     fileBatch.add(f);
                 }
             }
@@ -167,8 +247,7 @@ class HelperUtils {
         // TPP client application as source - check number of files and structure of main zip
         if (orgId.equalsIgnoreCase("TPP-01"))
         {
-            File [] folderFiles = fileFolder.listFiles();
-            int fileCount = folderFiles.length;
+            int fileCount = countFiles (fileFolder, false);
             if (fileCount != 4)
             {
                 System.out.println(String.format("Invalid number of files (%d) detected in folder: %s",fileCount,fileFolder.getPath()));
@@ -176,9 +255,11 @@ class HelperUtils {
             }
             else {
                 List<String> fileCheckArray = new ArrayList<String>(Arrays.asList("SRExtract.zip","SRManifest.csv","SRMapping.csv","SRMappingGroup.csv"));
+                File [] folderFiles = fileFolder.listFiles();
                 for (File df : folderFiles)
                 {
-                    boolean validFile = fileCheckArray.contains(df.getName());
+                    String fileExt = df.getName().substring(df.getName().lastIndexOf("."));
+                    boolean validFile = (fileCheckArray.contains(df.getName()) || fileCheckArray.contains(df.getName().replace(fileExt,".zip")));
                     if (!validFile)
                     {
                         System.out.println(String.format("Invalid file (%s) detected in folder: %s",df.getName(), fileFolder.getPath()));
@@ -206,4 +287,19 @@ class HelperUtils {
 
         return true;
     }
+
+    static int countFiles(File folder, boolean includeMulti)
+    {
+        File [] folderFiles = folder.listFiles();
+        List<String> fileList = new ArrayList<String>();
+        for (File f: folderFiles)
+        {
+            String filePrefix = f.getName().substring(0,f.getName().lastIndexOf("."));
+            if (includeMulti || !fileList.contains(filePrefix))
+                fileList.add(filePrefix);
+        }
+
+        return fileList.size();
+    }
+
 }

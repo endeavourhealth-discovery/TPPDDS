@@ -27,10 +27,12 @@ public class Main {
     private static final Logger LOG = LoggerFactory.getLogger(Main.class);
     private static final String APPLICATION_NAME = "Discovery Data File Uploader";
     private static final String KEYCLOAK_SERVICE_URI = "https://devauth.endeavourhealth.net/auth";
+    //private static final String UPLOAD_SERVICE_URI = "https://deveds.endeavourhealth.net/eds-api/api/PostFile?organisationId="; //"http://localhost:8083/api/PostFile?organisationId=";
     private static final String UPLOAD_SERVICE_URI = "http://localhost:8083/api/PostFile?organisationId=";
     private static final int HTTP_REQUEST_TIMEOUT_MILLIS = 7200000;   //2 hours
     private static final char DEFAULT_MODE = '0';
     private static final char UI_MODE = '1';
+    private static final int MAX_FILE_BATCH = 5;
 
     public static void main(String[] args) throws IOException {
 
@@ -66,11 +68,14 @@ public class Main {
                     JFileChooser fileChooser = new JFileChooser();
                     fileChooser.setDialogTitle(APPLICATION_NAME + " - Choose the data files to upload...");
                     fileChooser.setCurrentDirectory(new File(rootDir));
-                    inputFolders.add(new File(rootDir));
+
                     fileChooser.setMultiSelectionEnabled(true);
                     int result = fileChooser.showOpenDialog(null);
                     if (result == JFileChooser.APPROVE_OPTION) {
                         inputFiles = asList(fileChooser.getSelectedFiles());
+                        rootDir = fileChooser.getCurrentDirectory().getPath()+"\\";
+                        inputFolders.add(new File(rootDir));
+                        //TODO: process selected files and zip to multi-zip if large
                     } else
                         System.exit(0);
                     break;
@@ -82,59 +87,69 @@ public class Main {
 
             // at least one file found or selected for uploading
             if (inputFiles.size() > 0) {
-                 //loop through each valid folder (batch)
-                 for (File inputFolder : inputFolders)
-                 {
-                    String folderName = inputFolder.getPath();
-                    ArrayList<Integer> intArray = new ArrayList<Integer>();
-                    extractFileBatchLocations(inputFiles, folderName, intArray);
-
+                // loop through each valid folder (batch)
+                for (File inputFolder : inputFolders)
+                {
                     // check validity of upload files based on orgId and batch
                     if (!checkValidUploadFiles(orgId, inputFolder))
                         continue;
 
-                     // set service timeout limits
-                    RequestConfig requestConfig = RequestConfig
-                            .custom()
-                            .setConnectTimeout(HTTP_REQUEST_TIMEOUT_MILLIS)
-                            .setSocketTimeout(HTTP_REQUEST_TIMEOUT_MILLIS)
-                            .setConnectionRequestTimeout(HTTP_REQUEST_TIMEOUT_MILLIS)
-                            .build();
-                    CloseableHttpClient httpclient = HttpClientBuilder.create().setDefaultRequestConfig(requestConfig).build();
+                    ArrayList<Integer> intArray = new ArrayList<Integer>();
+                    String folderName = inputFolder.getPath();
+                    extractFileBatchLocations(inputFiles, folderName, intArray);
 
-                    // create the upload http service URL with Keycloak authorisation header
-                    String uri = UPLOAD_SERVICE_URI.concat(orgId);
-                    HttpPost httppost = new HttpPost(uri);
-                    httppost.setHeader(getKeycloakToken(key, username, password));
+                    //Loop through files in folder, uploading 5 files per time, per batch folder
+                    int start = intArray.get(0); int end = intArray.get(1);
+                    int from = start;
+                    do
+                    {   int to = from + MAX_FILE_BATCH;
+                        if (to > end) to = from + (to - end) + 1;
 
-                    // add each file into the upload
-                    MultipartEntityBuilder entityBuilder = MultipartEntityBuilder.create();
-                    for (File inputFile : inputFiles.subList(intArray.get(0), intArray.get(1))) {
-                        String uploadPathName = parseUploadFilePath(rootDir, inputFile);
-                        entityBuilder.addBinaryBody("file", inputFile, ContentType.APPLICATION_OCTET_STREAM, uploadPathName);
-                        System.out.println(inputFile + " added to transfer");
-                    }
-                    httppost.setEntity(entityBuilder.build());
+                        // set service timeout limits
+                        RequestConfig requestConfig = RequestConfig
+                                .custom()
+                                .setConnectTimeout(HTTP_REQUEST_TIMEOUT_MILLIS)
+                                .setSocketTimeout(HTTP_REQUEST_TIMEOUT_MILLIS)
+                                .setConnectionRequestTimeout(HTTP_REQUEST_TIMEOUT_MILLIS)
+                                .build();
+                        CloseableHttpClient httpclient = HttpClientBuilder.create().setDefaultRequestConfig(requestConfig).build();
 
-                    // execute the upload request
-                    System.out.println("\nTransfer started at " + new Date().toString() + "\n");
-                    HttpResponse response = httpclient.execute(httppost);
+                        // create the upload http service URL with Keycloak authorisation header
+                        String uri = UPLOAD_SERVICE_URI.concat(orgId);
+                        HttpPost httppost = new HttpPost(uri);
+                        httppost.setHeader(getKeycloakToken(key, username, password));
 
-                    int statusCode = response.getStatusLine().getStatusCode();
-                    HttpEntity responseEntity = response.getEntity();
-                    String responseString = EntityUtils.toString(responseEntity, "UTF-8");
+                        // add each batched file into the upload
+                        MultipartEntityBuilder entityBuilder = MultipartEntityBuilder.create();
+                        for (File inputFile : inputFiles.subList(from, to)) {
+                            String uploadPathName = parseUploadFilePath(rootDir, inputFile);
+                            entityBuilder.addBinaryBody("file", inputFile, ContentType.APPLICATION_OCTET_STREAM, uploadPathName);
+                            System.out.println(inputFile + " added to transfer");
+                        }
+                        httppost.setEntity(entityBuilder.build());
 
-                    // logout the Keycloak token session when finished
-                    KeycloakClient.instance().logoutSession();
+                        // execute the upload request
+                        System.out.println("\nTransfer started at " + new Date().toString() + "\n");
+                        HttpResponse response = httpclient.execute(httppost);
 
-                    System.out.println("[" + statusCode + "] " + responseString);
+                        int statusCode = response.getStatusLine().getStatusCode();
+                        HttpEntity responseEntity = response.getEntity();
+                        String responseString = EntityUtils.toString(responseEntity, "UTF-8");
 
-                    // delete source files after successful upload of the batch
-                    if (statusCode == 200) {
-                        deleteSourceFiles(orgId, inputFiles.subList(intArray.get(0),intArray.get(1)));
-                    }
+                        // logout the Keycloak token session when finished
+                        KeycloakClient.instance().logoutSession();
 
-                    System.out.println("\nTransfer completed at " + new Date().toString() + "\n");
+                        System.out.println("[" + statusCode + "] " + responseString);
+
+                        // delete source files after successful upload of this batch
+                        if (statusCode == 200) {
+                            deleteSourceFiles(orgId, inputFiles.subList(from, to));
+                        }
+
+                        System.out.println("\nTransfer completed at " + new Date().toString() + "\n");
+
+                        from = to;
+                    }while (from < end);
                 }
             }
             else
