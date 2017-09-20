@@ -100,10 +100,11 @@ public class Main {
 
                     //Loop through files in folder, uploading 5 files per time, per batch folder
                     int start = intArray.get(0); int end = intArray.get(1);
-                    int from = start;
+                    int from = start; int to=end;
                     do
-                    {   int to = from + MAX_FILE_BATCH;
-                        if (to > end) to = from + (to - end) + 1;
+                    {
+                        to = from + MAX_FILE_BATCH;
+                        if (to > end) to = end;
 
                         // set service timeout limits
                         RequestConfig requestConfig = RequestConfig
