@@ -27,7 +27,8 @@ public class Main {
     private static final Logger LOG = LoggerFactory.getLogger(Main.class);
     private static final String APPLICATION_NAME = "Discovery Data File Uploader";
     private static final String KEYCLOAK_SERVICE_URI = "https://devauth.endeavourhealth.net/auth";
-    //private static final String UPLOAD_SERVICE_URI = "https://deveds.endeavourhealth.net/eds-api/api/PostFile?organisationId="; //"http://localhost:8083/api/PostFile?organisationId=";
+    //private static final String UPLOAD_SERVICE_URI = "https://deveds.endeavourhealth.net/eds-api/api/PostFile?organisationId=";
+    //private static final String UPLOAD_SERVICE_URI = http://messagingapi01.endeavourhealth.net:8080/api/PostFile?organisationId=";
     private static final String UPLOAD_SERVICE_URI = "http://localhost:8083/api/PostFile?organisationId=";
     private static final int HTTP_REQUEST_TIMEOUT_MILLIS = 7200000;   //2 hours
     private static final char DEFAULT_MODE = '0';
@@ -37,24 +38,24 @@ public class Main {
     public static void main(String[] args) throws IOException {
 
         char mode = DEFAULT_MODE;
-        String key = ""; String username = ""; String password = ""; String rootDir = ""; String orgId = "";
+        String hookKey = ""; String username = ""; String password = ""; String rootDir = ""; String orgId = "";
         if (args.length > 0) mode = args[0].toCharArray()[0];
         if (args.length > 1) rootDir = args[1];
-        if (args.length > 2) key = args[2];
+        if (args.length > 2) hookKey = args[2];
         if (args.length > 3) username = args[3];
         if (args.length > 4) password = args[4];
         if (args.length > 5) orgId = args[5];
-        DataFileUpload(mode, rootDir, key, username, password, orgId);
+        DataFileUpload(mode, rootDir, hookKey, username, password, orgId);
     }
 
-    private static void DataFileUpload(char mode, String rootDir, String key, String username, String password, String orgId)
+    private static void DataFileUpload(char mode, String rootDir, String hookKey, String username, String password, String orgId)
     {
         System.out.println("===========================================");
         System.out.println("   "+APPLICATION_NAME+" (".concat(orgId)+")");
         System.out.println("===========================================\n");
 
         // run health checks specific to org
-        clientHealthChecks(orgId);
+        clientHealthChecks(hookKey, orgId);
 
         try {
             List<File> inputFiles = new LinkedList<File>();
@@ -118,7 +119,7 @@ public class Main {
                         // create the upload http service URL with Keycloak authorisation header
                         String uri = UPLOAD_SERVICE_URI.concat(orgId);
                         HttpPost httppost = new HttpPost(uri);
-                        httppost.setHeader(getKeycloakToken(key, username, password));
+                        httppost.setHeader(getKeycloakToken(username, password));
 
                         // add each batched file into the upload
                         MultipartEntityBuilder entityBuilder = MultipartEntityBuilder.create();
@@ -153,14 +154,16 @@ public class Main {
                     }while (from < end);
                 }
             }
-            else
+            else {
                 System.out.println("0 data upload files found.\n");
+                postSlackAlert("OrganisationId: "+orgId+" - 0 data upload files found.", hookKey);
+            }
         }catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    private static Header getKeycloakToken(String key, String username, String password) throws IOException
+    private static Header getKeycloakToken(String username, String password) throws IOException
     {
         KeycloakClient.init(KEYCLOAK_SERVICE_URI, "endeavour", username, password, "eds-ui");
         return KeycloakClient.instance().getAuthorizationHeader();

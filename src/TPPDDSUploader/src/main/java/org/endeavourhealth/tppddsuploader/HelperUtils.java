@@ -1,5 +1,8 @@
 package org.endeavourhealth.tppddsuploader;
 
+import net.gpedro.integrations.slack.SlackApi;
+import net.gpedro.integrations.slack.SlackException;
+import net.gpedro.integrations.slack.SlackMessage;
 import net.lingala.zip4j.core.ZipFile;
 import net.lingala.zip4j.exception.ZipException;
 import net.lingala.zip4j.model.FileHeader;
@@ -187,7 +190,7 @@ class HelperUtils {
         return fileBatch;
     }
 
-    static boolean clientHealthChecks(String orgId)
+    static boolean clientHealthChecks(String hookKey, String orgId)
     {
         if (orgId.isEmpty())
             return true;
@@ -204,7 +207,7 @@ class HelperUtils {
             catch (IOException ex1)
             {
                 System.out.println("Unable to connect to port 40700. Trying port 2135...");
-                //TODO: log this alert
+                postSlackAlert("OrganisationId: "+orgId+" - Unable to connect to port 40700. Trying port 2135...", hookKey);
                 try
                 {
                     (new Socket("localhost", 2135)).close();
@@ -212,8 +215,8 @@ class HelperUtils {
                 }
                 catch (IOException ex2)
                 {
-                    //TODO: log this alert
                     System.out.println("Unable to connect to port 2135.  TPP client application not running.");
+                    postSlackAlert("OrganisationId: "+orgId+" - Unable to connect to port 2135.  TPP client application not running.", hookKey);
                     return false;
                 }
             }
@@ -302,4 +305,15 @@ class HelperUtils {
         return fileList.size();
     }
 
+    static void postSlackAlert(String message, String hookKey) {
+        String url = "https://hooks.slack.com/services/T3MF59JFJ/B7DFYMUJK/";
+        url = url.concat(hookKey);
+        try {
+            SlackApi slackApi = new SlackApi(url);
+            slackApi.call(new SlackMessage(message));
+        }
+        catch (SlackException ex) {
+            System.out.println ("Invalid Slack integration credentials. Unable to create alerts");
+        }
+    }
 }
