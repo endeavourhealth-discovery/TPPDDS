@@ -3,21 +3,31 @@ package org.endeavourhealth.tppddsuploader;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
+import org.apache.http.client.HttpRequestRetryHandler;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.protocol.HttpContext;
 import org.apache.http.util.EntityUtils;
 import org.endeavourhealth.common.security.keycloak.client.KeycloakClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.net.ssl.SSLException;
 import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
-import java.util.*;
+import java.io.InterruptedIOException;
+import java.net.ConnectException;
+import java.net.SocketException;
+import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.LinkedList;
+import java.util.List;
 
 import static java.util.Arrays.asList;
 import static org.endeavourhealth.tppddsuploader.HelperUtils.*;
@@ -28,8 +38,8 @@ public class Main {
     private static final String APPLICATION_NAME = "Discovery Data File Uploader";
     private static final String KEYCLOAK_SERVICE_URI = "https://devauth.endeavourhealth.net/auth";
     //private static final String UPLOAD_SERVICE_URI = "https://deveds.endeavourhealth.net/eds-api/api/PostFile?organisationId=";
-    //private static final String UPLOAD_SERVICE_URI = http://messagingapi01.endeavourhealth.net:8080/api/PostFile?organisationId=";
-    private static final String UPLOAD_SERVICE_URI = "http://localhost:8083/api/PostFile?organisationId=";
+    private static final String UPLOAD_SERVICE_URI = "http://messagingapi01.endeavourhealth.net:8080/api/PostFile?organisationId=";
+    //private static final String UPLOAD_SERVICE_URI = "http://localhost:8083/api/PostFile?organisationId=";
     private static final int HTTP_REQUEST_TIMEOUT_MILLIS = 7200000;   //2 hours
     private static final char DEFAULT_MODE = '0';
     private static final char UI_MODE = '1';
@@ -114,7 +124,21 @@ public class Main {
                                 .setSocketTimeout(HTTP_REQUEST_TIMEOUT_MILLIS)
                                 .setConnectionRequestTimeout(HTTP_REQUEST_TIMEOUT_MILLIS)
                                 .build();
-                        CloseableHttpClient httpclient = HttpClientBuilder.create().setDefaultRequestConfig(requestConfig).build();
+
+                        HttpRequestRetryHandler retryHandler = new HttpRequestRetryHandler() {
+                            public boolean retryRequest(IOException exception, int executionCount, HttpContext context) {
+                                if (exception instanceof InterruptedIOException || exception instanceof UnknownHostException)
+                                    return false;
+                                if (exception instanceof ConnectException || exception instanceof SSLException)
+                                    return false;
+                                return !(exception instanceof SocketException);
+                            }
+                        };
+
+                        CloseableHttpClient httpclient = HttpClientBuilder
+                                .create()
+                                .setRetryHandler(retryHandler)
+                                .setDefaultRequestConfig(requestConfig).build();
 
                         // create the upload http service URL with Keycloak authorisation header
                         String uri = UPLOAD_SERVICE_URI.concat(orgId);
@@ -142,6 +166,7 @@ public class Main {
                         KeycloakClient.instance().logoutSession();
 
                         System.out.println("[" + statusCode + "] " + responseString);
+                        postSlackAlert("Transfer status for OrganisationId: ["+statusCode+"] "+responseString, hookKey);
 
                         // delete source files after successful upload of this batch
                         if (statusCode == 200) {

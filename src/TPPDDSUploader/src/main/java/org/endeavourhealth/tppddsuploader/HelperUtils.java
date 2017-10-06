@@ -23,7 +23,7 @@ import static java.util.Arrays.asList;
 
 class HelperUtils {
 
-    private static final long ZIP_SPLIT_SIZE = 20971520;
+    private static final long ZIP_SPLIT_SIZE = 10485760;
 
     private static boolean validZipFile(File zipFile)
     {
