@@ -29,7 +29,7 @@
 
 `[password] - Keycloak password`
 
-`[orgId] - Data publishing Organisation Id`
+`[orgId] - Data Publishing Organisation ODS code`
 
 ##### [location of data files for upload]
 `Typically c:\extract`
