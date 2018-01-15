@@ -36,9 +36,10 @@ public class Main {
 
     private static final Logger LOG = LoggerFactory.getLogger(Main.class);
     private static final String APPLICATION_NAME = "Discovery Data File Uploader";
-    private static final String KEYCLOAK_SERVICE_URI = "https://devauth.endeavourhealth.net/auth";
-    //private static final String UPLOAD_SERVICE_URI = "https://deveds.endeavourhealth.net/eds-api/api/PostFile?organisationId=";
-    private static final String UPLOAD_SERVICE_URI = "http://messagingapi01.endeavourhealth.net:8080/api/PostFile?organisationId=";
+    private static final String KEYCLOAK_SERVICE_URI = "https://n3auth.endeavourhealth.net/auth";
+    //private static final String KEYCLOAK_SERVICE_URI = "https://devauth.endeavourhealth.net/auth";
+    private static final String UPLOAD_SERVICE_URI = "https://n3messaging.endeavourhealth.net/api/PostFile?organisationId=";
+    //private static final String UPLOAD_SERVICE_URI = "http://192.168.20.58:8080/api/PostFile?organisationId=";
     //private static final String UPLOAD_SERVICE_URI = "http://localhost:8083/api/PostFile?organisationId=";
     private static final int HTTP_REQUEST_TIMEOUT_MILLIS = 7200000;   //2 hours
     private static final char DEFAULT_MODE = '0';
@@ -166,14 +167,15 @@ public class Main {
                         KeycloakClient.instance().logoutSession();
 
                         System.out.println("[" + statusCode + "] " + responseString);
-                        postSlackAlert("Transfer status for OrganisationId: ["+statusCode+"] "+responseString, hookKey);
+                        postSlackAlert("Transfer status for organisationId="+orgId+" : ["+statusCode+"] "+responseString, hookKey);
 
                         // delete source files after successful upload of this batch
                         if (statusCode == 200) {
                             deleteSourceFiles(orgId, inputFiles.subList(from, to));
+                            System.out.println("\nTransfer completed successfully at " + new Date().toString() + "\n");
+                        } else {
+                            System.out.println("\nTransfer failed at " + new Date().toString() + "\n");
                         }
-
-                        System.out.println("\nTransfer completed at " + new Date().toString() + "\n");
 
                         from = to;
                     }while (from < end);
