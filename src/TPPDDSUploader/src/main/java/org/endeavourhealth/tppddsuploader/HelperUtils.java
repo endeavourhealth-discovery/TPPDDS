@@ -24,6 +24,8 @@ import static java.util.Arrays.asList;
 class HelperUtils {
 
     private static final long ZIP_SPLIT_SIZE = 10485760;
+    private static final String TPP_ORG_ID = "YGM24";
+    private static final String HOMERTON_ORG_ID = "HOM-01";
 
     private static boolean validZipFile(File zipFile)
     {
@@ -196,7 +198,7 @@ class HelperUtils {
             return true;
 
         // TPP client application as source - check TCP ports to denote application running
-        if (orgId.equalsIgnoreCase("TPP-01"))
+        if (orgId.equalsIgnoreCase(TPP_ORG_ID))
         {
             System.out.println("Performing TPP client checks......\n");
             try
@@ -222,7 +224,7 @@ class HelperUtils {
             }
         }
         else
-        if (orgId.equalsIgnoreCase("HOM-01")) {
+        if (orgId.equalsIgnoreCase(HOMERTON_ORG_ID)) {
             return false;
         }
 
@@ -231,7 +233,7 @@ class HelperUtils {
 
     static void deleteSourceFiles(String orgId, List<File> sourceFiles)
     {
-        if (orgId.equalsIgnoreCase("TPP-01")) {
+        if (orgId.equalsIgnoreCase(TPP_ORG_ID)) {
             for (File f : sourceFiles) {
                 System.out.println("Delete file: " + f.getPath());
                 f.delete();
@@ -248,7 +250,7 @@ class HelperUtils {
     static boolean checkValidUploadFiles(String orgId, File fileFolder)
     {
         // TPP client application as source - check number of files and structure of main zip
-        if (orgId.equalsIgnoreCase("TPP-01"))
+        if (orgId.equalsIgnoreCase(TPP_ORG_ID))
         {
             int fileCount = countFiles (fileFolder, false);
             if (fileCount != 4)
@@ -283,7 +285,7 @@ class HelperUtils {
             return true;
         }
         else
-        if (orgId.equalsIgnoreCase("HOM-01"))
+        if (orgId.equalsIgnoreCase(HOMERTON_ORG_ID))
         {
             return true;
         }
