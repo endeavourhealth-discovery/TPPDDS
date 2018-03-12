@@ -1,6 +1,8 @@
 package org.endeavourhealth.tppddsuploader;
 
+import com.google.common.base.Strings;
 import net.gpedro.integrations.slack.SlackApi;
+import net.gpedro.integrations.slack.SlackAttachment;
 import net.gpedro.integrations.slack.SlackException;
 import net.gpedro.integrations.slack.SlackMessage;
 import net.lingala.zip4j.core.ZipFile;
@@ -13,7 +15,6 @@ import java.io.File;
 import java.io.FileFilter;
 import java.io.IOException;
 import java.net.Socket;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
@@ -64,7 +65,7 @@ class HelperUtils {
             if (!f.isDirectory()) {
                 if (validZipFile(f)) {
                     try {
-                        long fileSize = Files.size(f.toPath());
+                        long fileSize = f.length();
                         if (fileSize > ZIP_SPLIT_SIZE) {
                             System.out.println("Large zip file found: " + f.getPath() + " (" + fileSize + " bytes). Extracting....");
                             try {
@@ -209,7 +210,7 @@ class HelperUtils {
             catch (IOException ex1)
             {
                 System.out.println("Unable to connect to port 40700. Trying port 2135...");
-                postSlackAlert("OrganisationId: "+orgId+" - Unable to connect to port 40700. Trying port 2135...", hookKey);
+                postSlackAlert("OrganisationId: "+orgId+" - Unable to connect to port 40700. Trying port 2135...", hookKey, null);
                 try
                 {
                     (new Socket("localhost", 2135)).close();
@@ -218,7 +219,7 @@ class HelperUtils {
                 catch (IOException ex2)
                 {
                     System.out.println("Unable to connect to port 2135.  TPP client application not running.");
-                    postSlackAlert("OrganisationId: "+orgId+" - Unable to connect to port 2135.  TPP client application not running.", hookKey);
+                    postSlackAlert("OrganisationId: "+orgId+" - Unable to connect to port 2135.  TPP client application not running.", hookKey, null);
                     return false;
                 }
             }
@@ -235,7 +236,7 @@ class HelperUtils {
     {
         if (orgId.equalsIgnoreCase(TPP_ORG_ID)) {
             for (File f : sourceFiles) {
-                System.out.println("Delete file: " + f.getPath());
+                System.out.println("Delete local file: " + f.getPath());
                 f.delete();
 
                 // check if directory is now empty and delete it
@@ -307,15 +308,26 @@ class HelperUtils {
         return fileList.size();
     }
 
-    static void postSlackAlert(String message, String hookKey) {
+    static void postSlackAlert(String message, String hookKey, String exceptionMessage)
+    {
+        SlackMessage slackMessage = new SlackMessage(message);
+
+        if (!Strings.isNullOrEmpty(exceptionMessage)) {
+            SlackAttachment slackAttachment = new SlackAttachment();
+            slackAttachment.setFallback("Exception cannot be displayed");
+            slackAttachment.setText("```" + exceptionMessage + "```");
+            slackAttachment.addMarkdownAttribute("text");
+            slackMessage.addAttachments(slackAttachment);
+        }
+
         String url = "https://hooks.slack.com/services/T3MF59JFJ/B7DFYMUJK/";
         url = url.concat(hookKey);
         try {
             SlackApi slackApi = new SlackApi(url);
-            slackApi.call(new SlackMessage(message));
+            slackApi.call(slackMessage);
         }
         catch (SlackException ex) {
-            System.out.println ("Invalid Slack integration credentials. Unable to create alerts");
+            System.out.println ("\nInvalid Slack integration credentials. Unable to create alerts");
         }
     }
 }

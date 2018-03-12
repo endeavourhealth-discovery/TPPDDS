@@ -37,7 +37,8 @@ public class Main {
     private static final Logger LOG = LoggerFactory.getLogger(Main.class);
     private static final String APPLICATION_NAME = "Discovery Data File Uploader";
     private static final String KEYCLOAK_SERVICE_URI = "https://auth.discoverydataservice.net/auth";
-    private static final String UPLOAD_SERVICE_URI = "https://n3messaging.endeavourhealth.net/api/PostFile?organisationId=";
+    //private static final String UPLOAD_SERVICE_URI = "https://n3messaging.endeavourhealth.net/api/PostFile?organisationId=";
+    private static final String UPLOAD_SERVICE_URI = "https://n3messaging.endeavourhealth.net/eds-api2/api/PostFile?organisationId=";
     private static final int HTTP_REQUEST_TIMEOUT_MILLIS = 7200000;   //2 hours
     private static final char DEFAULT_MODE = '0';
     private static final char UI_MODE = '1';
@@ -103,6 +104,8 @@ public class Main {
                     if (!checkValidUploadFiles(orgId, inputFolder))
                         continue;
 
+                    System.out.println(inputFiles.size() + " valid data upload files found in " + inputFolder + "\n");
+
                     ArrayList<Integer> intArray = new ArrayList<Integer>();
                     String folderName = inputFolder.getPath();
                     extractFileBatchLocations(inputFiles, folderName, intArray);
@@ -139,6 +142,7 @@ public class Main {
                                 .setDefaultRequestConfig(requestConfig).build();
 
                         // create the upload http service URL with Keycloak authorisation header
+                        System.out.println("Authenticating.......\n");
                         String uri = UPLOAD_SERVICE_URI.concat(orgId);
                         HttpPost httppost = new HttpPost(uri);
                         httppost.setHeader(getKeycloakToken(username, password));
@@ -164,7 +168,7 @@ public class Main {
                         KeycloakClient.instance().logoutSession();
 
                         System.out.println("[" + statusCode + "] " + responseString);
-                        postSlackAlert("Transfer status for organisationId="+orgId+" : ["+statusCode+"] "+responseString, hookKey);
+                        postSlackAlert("Transfer status for organisationId="+orgId+" : ["+statusCode+"] "+responseString, hookKey, null);
 
                         // delete source files after successful upload of this batch
                         if (statusCode == 200) {
@@ -179,16 +183,18 @@ public class Main {
                 }
             }
             else {
-                System.out.println("0 data upload files found.\n");
-                postSlackAlert("OrganisationId: "+orgId+" - 0 data upload files found.", hookKey);
+                System.out.println("0 data upload files found in " + rootDir + "\n");
+                postSlackAlert("OrganisationId: "+orgId+" - 0 data upload files found.", hookKey, null);
             }
-        }catch (Exception e) {
+        } catch (Exception e) {
             e.printStackTrace();
+            postSlackAlert("Exception occured during upload for OrganisationId: "+orgId, hookKey, e.getMessage());
         }
     }
 
     private static Header getKeycloakToken(String username, String password) throws IOException
     {
+        //KeycloakClient.init(KEYCLOAK_SERVICE_URI, "DiscoveryAPI", username, password, "dds-api"); //TODO: confgure realm in messaging-api
         KeycloakClient.init(KEYCLOAK_SERVICE_URI, "endeavour", username, password, "eds-ui");
         return KeycloakClient.instance().getAuthorizationHeader();
     }

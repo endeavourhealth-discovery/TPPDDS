@@ -3,6 +3,7 @@ package org.endeavourhealth.tppddpatcher;
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.SdkBaseException;
+import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.ListObjectsRequest;
@@ -15,8 +16,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
+import java.util.Date;
 import java.util.List;
 
 public class Main {
@@ -25,10 +25,13 @@ public class Main {
     private static final String APPLICATION_NAME = "Discovery Data File Uploader Patcher";
 
     public static void main(String[] args) throws IOException {
-        AmazonS3ClientBuilder s3 = AmazonS3ClientBuilder.standard();
+        AmazonS3ClientBuilder s3 = AmazonS3ClientBuilder
+                .standard()
+                .withRegion(Regions.EU_WEST_2);
+
         String awsBucketName = args[0];
         String localWorkingDirectory = args[1];
-        String awsPatchDirectory = "patch";
+        String awsPatchDirectory = "tppddspatcher";
         String patchFileName = "tpp-dds-uploader-patch.jar";
 
         System.out.println("==========================================");
@@ -73,9 +76,9 @@ public class Main {
         lor.setPrefix(patchFileKey);
         ObjectListing ol = s3.listObjects(lor);
 
-        // returns the S3 directory and patch files matching key
+        // returns the S3 directory and patch files matching the key
         List<S3ObjectSummary> patchFiles = ol.getObjectSummaries();
-        if (patchFiles.size()>0)
+        if (patchFiles.size()>0 && !CheckLocalVersionCurrent(patchFiles.get(0), localWorkingDirectory))
         {
             System.out.println("Patch update available, downloading......\n");
             TransferManagerBuilder tx = TransferManagerBuilder.standard().withS3Client(s3);
@@ -84,12 +87,9 @@ public class Main {
                 Download dl = tx.build().download(awsBucketName, patchFileKey, new File(patchFile));
                 dl.waitForCompletion();
 
-                // copy the patch file over the existing executable then delete the source file
+                // copy the patch file over the existing executable
                 PatchLocalFile(localWorkingDirectory, patchFile);
                 System.out.println("Patch update applied successfully.\n");
-
-                // remove the source patch file from s3 once successfully patched
-                s3.deleteObject(awsBucketName, patchFileKey);
             }
             finally {
                 tx.build().shutdownNow();
@@ -100,15 +100,33 @@ public class Main {
         }
     }
 
+    private static boolean CheckLocalVersionCurrent(S3ObjectSummary patchFile, String localWorkingDirectory) {
+
+        String existingFilename = localWorkingDirectory + "tpp-dds-uploader.jar";
+        File existingFile = new File(existingFilename);
+
+        Date patchModifiedDate = patchFile.getLastModified();
+        Long existingDate = existingFile.lastModified();
+
+        return existingDate >= patchModifiedDate.getTime();
+    }
+
+
     private static void PatchLocalFile(String localWorkingDirectory, String patchFileName) throws IOException {
         File patchFile = new File(patchFileName);
-        if (Files.exists(patchFile.toPath()))
+        if (patchFile.exists())
         {
             String existingFilename = localWorkingDirectory + "tpp-dds-uploader.jar";
             File existingFile = new File(existingFilename);
 
-            Files.copy(patchFile.toPath(), existingFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            Files.delete(patchFile.toPath());
+            //delete existing file
+            existingFile.delete();
+
+            //copy/rename patch file to new file
+            patchFile.renameTo(existingFile);
+
+            //delete patch file
+            patchFile.delete();
         }
         else
         {
