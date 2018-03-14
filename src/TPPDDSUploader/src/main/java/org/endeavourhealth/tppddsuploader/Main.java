@@ -37,8 +37,7 @@ public class Main {
     private static final Logger LOG = LoggerFactory.getLogger(Main.class);
     private static final String APPLICATION_NAME = "Discovery Data File Uploader";
     private static final String KEYCLOAK_SERVICE_URI = "https://auth.discoverydataservice.net/auth";
-    //private static final String UPLOAD_SERVICE_URI = "https://n3messaging.endeavourhealth.net/api/PostFile?organisationId=";
-    private static final String UPLOAD_SERVICE_URI = "https://n3messaging.endeavourhealth.net/eds-api2/api/PostFile?organisationId=";
+    private static final String UPLOAD_SERVICE_URI = "https://n3messageapi.discoverydataservice.net/api/PostFile?organisationId=";
     private static final int HTTP_REQUEST_TIMEOUT_MILLIS = 7200000;   //2 hours
     private static final char DEFAULT_MODE = '0';
     private static final char UI_MODE = '1';
@@ -90,7 +89,7 @@ public class Main {
                         System.exit(0);
                     break;
                 default:
-                    System.out.println("\nChecking for data upload files....\n");
+                    System.out.println("\nChecking for data upload files......\n");
                     inputFolders = getUploadFileList(new File(rootDir),inputFiles);
                     break;
             }
@@ -104,15 +103,15 @@ public class Main {
                     if (!checkValidUploadFiles(orgId, inputFolder))
                         continue;
 
-                    System.out.println(inputFiles.size() + " valid data upload files found in " + inputFolder + "\n");
-
                     ArrayList<Integer> intArray = new ArrayList<Integer>();
                     String folderName = inputFolder.getPath();
                     extractFileBatchLocations(inputFiles, folderName, intArray);
 
-                    //Loop through files in folder, uploading 5 files per time, per batch folder
                     int start = intArray.get(0); int end = intArray.get(1);
-                    int from = start; int to=end;
+                    int from = start; int to = end; int fileCount = to - from;
+                    System.out.println("\n" + fileCount + " valid data upload files found in " + inputFolder + "\n");
+
+                    //Loop through files in folder, uploading 5 files per time, per batch folder
                     do
                     {
                         to = from + MAX_FILE_BATCH;
