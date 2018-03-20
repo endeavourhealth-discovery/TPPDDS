@@ -1,6 +1,5 @@
 package org.endeavourhealth.tppddsuploader;
 
-import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpRequestRetryHandler;
@@ -41,6 +40,7 @@ public class Main {
     private static final int HTTP_REQUEST_TIMEOUT_MILLIS = 7200000;   //2 hours
     private static final char DEFAULT_MODE = '0';
     private static final char UI_MODE = '1';
+    private static final char TEST_MODE = '2';
     private static final int MAX_FILE_BATCH = 5;
 
     public static void main(String[] args) throws IOException {
@@ -62,14 +62,14 @@ public class Main {
         System.out.println("   "+APPLICATION_NAME+" (".concat(orgId)+")");
         System.out.println("===========================================\n");
 
-        // run health checks specific to org
-        clientHealthChecks(hookKey, orgId);
-
         try {
             List<File> inputFiles = new LinkedList<File>();
             List<File> inputFolders = new LinkedList<File>();
             switch (mode) {
                 case DEFAULT_MODE:
+                    // run health checks specific to org
+                    clientHealthChecks(hookKey, orgId);
+
                     System.out.println("\nChecking for data upload files......\n");
                     inputFolders = getUploadFileList(new File(rootDir),inputFiles);
                     break;
@@ -87,6 +87,10 @@ public class Main {
                         //TODO: process selected files and zip to multi-zip if large
                     } else
                         System.exit(0);
+                    break;
+                case TEST_MODE:
+                    runTestMode (KEYCLOAK_SERVICE_URI, hookKey, username, password, orgId);
+                    System.exit(0);
                     break;
                 default:
                     System.out.println("\nChecking for data upload files......\n");
@@ -144,7 +148,7 @@ public class Main {
                         System.out.println("Authenticating.......\n");
                         String uri = UPLOAD_SERVICE_URI.concat(orgId);
                         HttpPost httppost = new HttpPost(uri);
-                        httppost.setHeader(getKeycloakToken(username, password));
+                        httppost.setHeader(getKeycloakToken(KEYCLOAK_SERVICE_URI, username, password));
 
                         // add each batched file into the upload
                         MultipartEntityBuilder entityBuilder = MultipartEntityBuilder.create();
@@ -189,12 +193,5 @@ public class Main {
             e.printStackTrace();
             postSlackAlert("Exception occured during upload for OrganisationId: "+orgId, hookKey, e.getMessage());
         }
-    }
-
-    private static Header getKeycloakToken(String username, String password) throws IOException
-    {
-        //KeycloakClient.init(KEYCLOAK_SERVICE_URI, "DiscoveryAPI", username, password, "dds-api"); //TODO: confgure realm in messaging-api
-        KeycloakClient.init(KEYCLOAK_SERVICE_URI, "endeavour", username, password, "eds-ui");
-        return KeycloakClient.instance().getAuthorizationHeader();
     }
 }

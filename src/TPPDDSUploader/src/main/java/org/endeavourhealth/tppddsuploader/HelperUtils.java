@@ -10,6 +10,8 @@ import net.lingala.zip4j.exception.ZipException;
 import net.lingala.zip4j.model.FileHeader;
 import net.lingala.zip4j.model.ZipParameters;
 import net.lingala.zip4j.util.Zip4jConstants;
+import org.apache.http.Header;
+import org.endeavourhealth.common.security.keycloak.client.KeycloakClient;
 
 import java.io.File;
 import java.io.FileFilter;
@@ -313,11 +315,35 @@ class HelperUtils {
         String url = "https://hooks.slack.com/services/T3MF59JFJ/B7DFYMUJK/";
         url = url.concat(hookKey);
         try {
+            //SocketAddress sa = InetSocketAddress.createUnresolved("nat.endeavourhealth.net", 3124);
+            //Proxy proxy = new Proxy(Proxy.Type.HTTP,sa);
+            //SlackApi slackApi = new SlackApi(url, 10000, proxy);
             SlackApi slackApi = new SlackApi(url);
             slackApi.call(slackMessage);
         }
         catch (SlackException ex) {
-            System.out.println ("\nInvalid Slack integration credentials. Unable to create alerts");
+            System.out.println ("\nSlack integration failure. Unable to create alert => "+ex.getMessage());
         }
+    }
+
+    static Header getKeycloakToken(String keycloakURI, String username, String password) throws IOException
+    {
+        //KeycloakClient.init(KEYCLOAK_SERVICE_URI, "DiscoveryAPI", username, password, "dds-api"); //TODO: confgure realm in messaging-api
+        KeycloakClient.init(keycloakURI, "endeavour", username, password, "eds-ui");
+        return KeycloakClient.instance().getAuthorizationHeader();
+    }
+
+    static void runTestMode (String keycloakURI, String hookKey, String username, String password, String orgId) {
+        System.out.println("\nEntering test mode......\n");
+        System.out.println("\n(1) Authentication test....");
+        try {
+            String token = getKeycloakToken(keycloakURI, username, password).getValue();
+            System.out.println("\nToken => "+token+"\n");
+        } catch (Exception ex) {
+            System.out.println("\nAuthentication failed => "+ex.getMessage());
+        }
+
+        System.out.println("\n(2) Slack alerts test....\n");
+        postSlackAlert("Test alert for OrganisationId = "+orgId, hookKey, null);
     }
 }
