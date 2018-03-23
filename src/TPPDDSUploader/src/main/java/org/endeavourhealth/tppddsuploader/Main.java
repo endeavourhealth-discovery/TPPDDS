@@ -23,10 +23,7 @@ import java.io.InterruptedIOException;
 import java.net.ConnectException;
 import java.net.SocketException;
 import java.net.UnknownHostException;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
 
 import static java.util.Arrays.asList;
 import static org.endeavourhealth.tppddsuploader.HelperUtils.*;
@@ -71,6 +68,7 @@ public class Main {
                     clientHealthChecks(hookKey, orgId);
 
                     System.out.println("\nChecking for data upload files......\n");
+                    postSlackAlert("OrganisationId: "+orgId+" - Checking for data upload files......", hookKey, null);
                     inputFolders = getUploadFileList(new File(rootDir),inputFiles);
                     break;
                 case UI_MODE:
@@ -104,7 +102,7 @@ public class Main {
                 for (File inputFolder : inputFolders)
                 {
                     // check validity of upload files based on orgId and batch
-                    if (!checkValidUploadFiles(orgId, inputFolder))
+                    if (!checkValidUploadFiles(orgId, inputFolder, hookKey))
                         continue;
 
                     ArrayList<Integer> intArray = new ArrayList<Integer>();
@@ -114,6 +112,7 @@ public class Main {
                     int start = intArray.get(0); int end = intArray.get(1);
                     int from = start; int to = end; int fileCount = to - from;
                     System.out.println("\n" + fileCount + " valid data upload files found in " + inputFolder + "\n");
+                    postSlackAlert("OrganisationId: "+orgId+" - "+fileCount + " valid data upload files found in " + inputFolder, hookKey, null);
 
                     //Loop through files in folder, uploading 5 files per time, per batch folder
                     do
@@ -161,6 +160,8 @@ public class Main {
 
                         // execute the upload request
                         System.out.println("\nTransfer started at " + new Date().toString() + "\n");
+                        postSlackAlert("OrganisationId: "+orgId+" - Transfer started at " + new Date().toString(), hookKey, null);
+
                         HttpResponse response = httpclient.execute(httppost);
 
                         int statusCode = response.getStatusLine().getStatusCode();
@@ -171,15 +172,19 @@ public class Main {
                         KeycloakClient.instance().logoutSession();
 
                         System.out.println("[" + statusCode + "] " + responseString);
-                        postSlackAlert("Transfer status for organisationId="+orgId+" : ["+statusCode+"] "+responseString, hookKey, null);
 
                         // delete source files after successful upload of this batch
+                        String fileDetails = "";
                         if (statusCode == 200) {
                             deleteSourceFiles(orgId, inputFiles.subList(from, to));
                             System.out.println("\nTransfer completed successfully at " + new Date().toString() + "\n");
+
+                            fileDetails = " - " + inputFiles.subList(from, to).toString();
                         } else {
                             System.out.println("\nTransfer failed at " + new Date().toString() + "\n");
                         }
+
+                        postSlackAlert("Transfer status for organisationId="+orgId+" : ["+statusCode+"] "+responseString + fileDetails, hookKey, null);
 
                         from = to;
                     }while (from < end);

@@ -245,20 +245,33 @@ class HelperUtils {
         }
     }
 
-    static boolean checkValidUploadFiles(String orgId, File fileFolder)
+    static String fileListDisplay (File [] files) {
+        String display = "";
+
+        for (File f : files) {
+            display = display.concat(f.getName() + "\n");
+        }
+
+        return display;
+    }
+
+    static boolean checkValidUploadFiles(String orgId, File fileFolder, String hookKey)
     {
         // TPP client application as source - check number of files and structure of main zip
         if (TPP_ORGS.contains(orgId))
         {
             int fileCount = countFiles (fileFolder, false);
+            File [] folderFiles = fileFolder.listFiles();
             if (fileCount != 4)
             {
                 System.out.println(String.format("Invalid number of files (%d) detected in folder: %s",fileCount,fileFolder.getPath()));
+
+                postSlackAlert("OrganisationId: "+orgId+" - "+ String.format("Invalid number of files (%d) detected in folder: %s",fileCount,fileFolder.getPath()), hookKey, fileListDisplay(folderFiles));
                 return false;
             }
             else {
                 List<String> fileCheckArray = new ArrayList<String>(Arrays.asList("SRExtract.zip","SRManifest.csv","SRMapping.csv","SRMappingGroup.csv"));
-                File [] folderFiles = fileFolder.listFiles();
+                //File [] folderFiles = fileFolder.listFiles();
                 for (File df : folderFiles)
                 {
                     String fileExt = df.getName().substring(df.getName().lastIndexOf("."));
@@ -266,6 +279,7 @@ class HelperUtils {
                     if (!validFile)
                     {
                         System.out.println(String.format("Invalid file (%s) detected in folder: %s",df.getName(), fileFolder.getPath()));
+                        postSlackAlert("OrganisationId: "+orgId+" - "+ String.format("Invalid file (%s) detected in folder: %s",df.getName(), fileFolder.getPath()), hookKey, fileListDisplay(folderFiles));
                         return false;
                     }
 
@@ -275,6 +289,7 @@ class HelperUtils {
                         if (!validZipFile(df))
                         {
                             System.out.println(String.format("Invalid Zip file (%s) detected in folder: %s ",df.getName(),fileFolder.getPath()));
+                            postSlackAlert("OrganisationId: "+orgId+" - "+ String.format("Invalid Zip file (%s) detected in folder: %s ",df.getName(),fileFolder.getPath()), hookKey, null);
                             return false;
                         }
                     }
