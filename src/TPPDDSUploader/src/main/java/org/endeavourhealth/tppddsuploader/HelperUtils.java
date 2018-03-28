@@ -150,6 +150,19 @@ class HelperUtils {
         intArray.add(start); intArray.add(end);
     }
 
+    static void monitorRootDirectoryFiles (File localDataRootDir, String orgId, String hookKey) {
+
+        File[] filesFound = localDataRootDir.listFiles(new FileFilter() {
+            public boolean accept(File pathname) {
+                return !pathname.isDirectory();
+            }
+        });
+        if(filesFound != null && filesFound.length>0) {
+            System.out.println(String.format("\nFiles detected root directory: %s", localDataRootDir.getPath()));
+            postSlackAlert("OrganisationId: "+orgId+" - "+ String.format("Files detected in root directory: %s", localDataRootDir.getPath()), hookKey, fileListDisplay(filesFound));
+        }
+    }
+
     static String parseUploadFilePath(String rootDir, File filePath)
     {
         // remove Archived path level and root directory from the file path.  We only want the baseline folder and filename
@@ -249,7 +262,8 @@ class HelperUtils {
         String display = "";
 
         for (File f : files) {
-            display = display.concat(f.getName() + "\n");
+            long sizeKb = f.length() / 1024;
+            display = display.concat(f.getName() + " : " + Long.toString(sizeKb) +  " kb\n");
         }
 
         return display;

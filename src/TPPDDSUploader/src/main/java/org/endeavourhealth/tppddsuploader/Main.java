@@ -66,6 +66,8 @@ public class Main {
                 case DEFAULT_MODE:
                     // run health checks specific to org
                     clientHealthChecks(hookKey, orgId);
+                    // check root director for presence of files and report name and size
+                    monitorRootDirectoryFiles (new File(rootDir), orgId, hookKey);
 
                     System.out.println("\nChecking for data upload files......\n");
                     postSlackAlert("OrganisationId: "+orgId+" - Checking for data upload files......", hookKey, null);
