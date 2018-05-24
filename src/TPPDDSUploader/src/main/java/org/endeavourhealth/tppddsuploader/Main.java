@@ -100,12 +100,17 @@ public class Main {
 
             // at least one file found or selected for uploading
             if (inputFiles.size() > 0) {
+
+                int validFiles = 0;
+
                 // loop through each valid folder (batch)
                 for (File inputFolder : inputFolders)
                 {
                     // check validity of upload files based on orgId and batch
                     if (!checkValidUploadFiles(orgId, inputFolder, hookKey))
                         continue;
+
+                    validFiles++;
 
                     ArrayList<Integer> intArray = new ArrayList<Integer>();
                     String folderName = inputFolder.getPath();
@@ -151,6 +156,8 @@ public class Main {
                         HttpPost httppost = new HttpPost(uri);
                         httppost.setHeader(getKeycloakToken(KEYCLOAK_SERVICE_URI, username, password));
 
+                        postSlackAlert("OrganisationId: "+orgId+" - Authenticated OK", hookKey, null);
+
                         // add each batched file into the upload
                         MultipartEntityBuilder entityBuilder = MultipartEntityBuilder.create();
                         for (File inputFile : inputFiles.subList(from, to)) {
@@ -158,6 +165,9 @@ public class Main {
                             entityBuilder.addBinaryBody("file", inputFile, ContentType.APPLICATION_OCTET_STREAM, uploadPathName);
                             System.out.println(inputFile + " added to transfer");
                         }
+
+                        postSlackAlert("OrganisationId: "+orgId+" - Adding files to transfer", hookKey, null);
+
                         httppost.setEntity(entityBuilder.build());
 
                         // execute the upload request
@@ -190,6 +200,11 @@ public class Main {
 
                         from = to;
                     }while (from < end);
+                }
+
+                //if none of the input files are valid, set alert
+                if (validFiles == 0) {
+                    postSlackAlert("OrganisationId: "+orgId+" - 0 valid data upload files found.", hookKey, null);
                 }
             }
             else {
