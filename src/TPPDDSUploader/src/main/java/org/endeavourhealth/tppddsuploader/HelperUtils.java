@@ -357,8 +357,7 @@ class HelperUtils {
 
     static Header getKeycloakToken(String keycloakURI, String username, String password) throws IOException
     {
-        //KeycloakClient.init(KEYCLOAK_SERVICE_URI, "DiscoveryAPI", username, password, "dds-api"); //TODO: confgure realm in messaging-api
-        KeycloakClient.init(keycloakURI, "endeavour", username, password, "eds-ui");
+        KeycloakClient.init(keycloakURI, "endeavour-machine", username, password, "dds-api");
         return KeycloakClient.instance().getAuthorizationHeader();
     }
 

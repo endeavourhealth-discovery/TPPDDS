@@ -33,7 +33,7 @@ public class Main {
     private static final Logger LOG = LoggerFactory.getLogger(Main.class);
     private static final String APPLICATION_NAME = "Discovery Data File Uploader";
     private static final String KEYCLOAK_SERVICE_URI = "https://auth.discoverydataservice.net/auth";
-    private static final String UPLOAD_SERVICE_URI = "https://n3messageapi.discoverydataservice.net/api/PostFile?organisationId=";
+    private static final String UPLOAD_SERVICE_URI = "https://n3messageapi.discoverydataservice.net/machine-api/PostFile?organisationId=";
     private static final int HTTP_REQUEST_TIMEOUT_MILLIS = 7200000;   //2 hours
     private static final char DEFAULT_MODE = '0';
     private static final char UI_MODE = '1';
