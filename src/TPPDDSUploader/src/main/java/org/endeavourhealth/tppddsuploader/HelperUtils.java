@@ -17,10 +17,10 @@ import java.io.File;
 import java.io.FileFilter;
 import java.io.IOException;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.LinkedList;
-import java.util.List;
+import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
 
 import static java.util.Arrays.asList;
 
@@ -117,6 +117,31 @@ class HelperUtils {
             }
         }
         return outputFiles;
+    }
+
+    // delete old invalid archive folders from the client if over two months old.  Folder format is:
+    // C:\Apps\StrategicReporting\Archived\20180326_1008
+    static void removeOldInvalidArchiveFolders(String hookKey, String orgId, ArrayList <File> invalidFolders) throws Exception {
+
+        for (File folder : invalidFolders) {
+            String folderPath = folder.getPath();
+            String folderPathDatePart = folderPath.substring(folderPath.lastIndexOf("\\")+1);
+
+            //reverse date part of the folder path
+            folderPathDatePart = folderPathDatePart.substring(0, folderPathDatePart.indexOf("_"));
+            Date folderDate = new SimpleDateFormat("yyyyMMdd").parse(folderPathDatePart);
+
+            LocalDate threeMonthsAgo = LocalDate.now().minusMonths(3);
+            DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyyMMdd");   //ensure no time element
+            Date dateThreeMonthsAgo = new SimpleDateFormat("yyyyMMdd").parse(dtf.format(threeMonthsAgo));
+
+            //if the folder date is older than two months then delete
+            if (dateThreeMonthsAgo.after(folderDate)) {
+                DeleteDirectory(folderPath);
+                System.out.println(String.format("Invalid files folder older than three months: %s has been deleted ", folderPath));
+                postSlackAlert("OrganisationId: "+orgId+" - Invalid files folder older than three months: "+folderPath+" has been deleted", hookKey, null);
+            }
+        }
     }
 
     static void DeleteDirectory(String directory)
@@ -278,8 +303,8 @@ class HelperUtils {
             File [] folderFiles = fileFolder.listFiles();
             if (fileCount != 4)
             {
-                System.out.println(String.format("Invalid number of files (%d) detected in folder: %s",fileCount,fileFolder.getPath()));
 
+                System.out.println(String.format("Invalid number of files (%d) detected in folder: %s",fileCount,fileFolder.getPath()));
                 postSlackAlert("OrganisationId: "+orgId+" - "+ String.format("Invalid number of files (%d) detected in folder: %s",fileCount,fileFolder.getPath()), hookKey, fileListDisplay(folderFiles));
                 return false;
             }
@@ -288,10 +313,20 @@ class HelperUtils {
                 //File [] folderFiles = fileFolder.listFiles();
                 for (File df : folderFiles)
                 {
-                    String fileExt = df.getName().substring(df.getName().lastIndexOf("."));
+                    int fileExtIndex = df.getName().lastIndexOf(".");
+                    // check for non file extension
+                    if (fileExtIndex == -1) {
+
+                        System.out.println(String.format("Invalid file (%s) detected in folder: %s",df.getName(), fileFolder.getPath()));
+                        postSlackAlert("OrganisationId: "+orgId+" - "+ String.format("Invalid file (%s) detected in folder: %s",df.getName(), fileFolder.getPath()), hookKey, fileListDisplay(folderFiles));
+                        return false;
+                    }
+
+                    String fileExt = df.getName().substring(fileExtIndex);
                     boolean validFile = (fileCheckArray.contains(df.getName()) || fileCheckArray.contains(df.getName().replace(fileExt,".zip")));
                     if (!validFile)
                     {
+
                         System.out.println(String.format("Invalid file (%s) detected in folder: %s",df.getName(), fileFolder.getPath()));
                         postSlackAlert("OrganisationId: "+orgId+" - "+ String.format("Invalid file (%s) detected in folder: %s",df.getName(), fileFolder.getPath()), hookKey, fileListDisplay(folderFiles));
                         return false;
@@ -321,7 +356,12 @@ class HelperUtils {
         List<String> fileList = new ArrayList<String>();
         for (File f: folderFiles)
         {
-            String filePrefix = f.getName().substring(0,f.getName().lastIndexOf("."));
+            String filePrefix = f.getName();
+            int fileExtIndex = f.getName().lastIndexOf(".");
+            if (fileExtIndex != -1) {
+                filePrefix = f.getName().substring(0, fileExtIndex);
+            }
+            // treat multi-part zips as a single file for fileCount purposes
             if (includeMulti || !fileList.contains(filePrefix))
                 fileList.add(filePrefix);
         }

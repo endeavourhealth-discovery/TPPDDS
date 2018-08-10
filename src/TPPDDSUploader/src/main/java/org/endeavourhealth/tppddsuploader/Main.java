@@ -98,6 +98,9 @@ public class Main {
                     break;
             }
 
+            // housekeeping of invalid data folders
+            ArrayList<File> invalidFolders = new ArrayList<File>();
+
             // at least one file found or selected for uploading
             if (inputFiles.size() > 0) {
 
@@ -107,19 +110,24 @@ public class Main {
                 for (File inputFolder : inputFolders)
                 {
                     // check validity of upload files based on orgId and batch
-                    if (!checkValidUploadFiles(orgId, inputFolder, hookKey))
+                    if (!checkValidUploadFiles(orgId, inputFolder, hookKey)) {
+
+                        invalidFolders.add(inputFolder);
                         continue;
+                    }
 
                     validFiles++;
 
                     ArrayList<Integer> intArray = new ArrayList<Integer>();
                     String folderName = inputFolder.getPath();
+                    System.out.println("Checking file batch locations in folder:" + folderName + "\n");
+                    postSlackAlert("OrganisationId: "+orgId+" - checking file batch locations in folder: " + folderName, hookKey, null);
                     extractFileBatchLocations(inputFiles, folderName, intArray);
 
                     int start = intArray.get(0); int end = intArray.get(1);
                     int from = start; int to = end; int fileCount = to - from;
-                    System.out.println("\n" + fileCount + " valid data upload files found in " + inputFolder + "\n");
-                    postSlackAlert("OrganisationId: "+orgId+" - "+fileCount + " valid data upload files found in " + inputFolder, hookKey, null);
+                    System.out.println("\n" + fileCount + " valid data upload files found in " + folderName + "\n");
+                    postSlackAlert("OrganisationId: "+orgId+" - "+fileCount + " valid data upload files found in " + folderName, hookKey, null);
 
                     //Loop through files in folder, uploading 5 files per time, per batch folder
                     do
@@ -206,6 +214,9 @@ public class Main {
                 if (validFiles == 0) {
                     postSlackAlert("OrganisationId: "+orgId+" - 0 valid data upload files found.", hookKey, null);
                 }
+
+                // perform clean up housekeeping of old, invalid archive folders
+                removeOldInvalidArchiveFolders(hookKey, orgId, invalidFolders);
             }
             else {
                 System.out.println("0 data upload files found in " + rootDir + "\n");
