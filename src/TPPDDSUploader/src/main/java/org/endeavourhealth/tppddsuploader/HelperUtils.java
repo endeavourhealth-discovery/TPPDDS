@@ -27,7 +27,9 @@ import static java.util.Arrays.asList;
 class HelperUtils {
 
     private static final long ZIP_SPLIT_SIZE = 10485760;
-    private static final String TPP_ORGS = "TPP-01,F86638";
+
+    // add in publishing service ODS code here.  The first one is the DDS test service.
+    private static final String TPP_ORGS = "TPP-01,F86638,B86071,B86022";
 
     private static boolean validZipFile(File zipFile)
     {
