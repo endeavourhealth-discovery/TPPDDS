@@ -208,8 +208,6 @@ class HelperUtils {
         if(archivedFoldersFound != null) {
             for (File f : archivedFoldersFound) {
                 if (f.isDirectory() && f.listFiles()!= null) {
-                    //splitLargeZipFiles(asList(f.listFiles()));
-
                     results.addAll(splitLargeZipFiles(asList(f.listFiles())));
                     fileBatch.add(f);
                 }
@@ -219,7 +217,9 @@ class HelperUtils {
         // now get non Archived files.  Should only be a single folder
         File[] filesFound = localDataDir.listFiles(new FileFilter() {
             public boolean accept(File pathname) {
-                return !pathname.getName().equalsIgnoreCase("Archived") && pathname.isDirectory();
+                return !pathname.getName().equalsIgnoreCase("Archived")
+                       && !pathname.getName().equalsIgnoreCase("BulkExtracts")
+                       && pathname.isDirectory();
             }
         });
         if(filesFound != null) {
@@ -386,9 +386,6 @@ class HelperUtils {
         String url = "https://hooks.slack.com/services/T3MF59JFJ/B7DFYMUJK/";
         url = url.concat(hookKey);
         try {
-            //SocketAddress sa = InetSocketAddress.createUnresolved("nat.endeavourhealth.net", 3124);
-            //Proxy proxy = new Proxy(Proxy.Type.HTTP,sa);
-            //SlackApi slackApi = new SlackApi(url, 10000, proxy);
             SlackApi slackApi = new SlackApi(url);
             slackApi.call(slackMessage);
         }
