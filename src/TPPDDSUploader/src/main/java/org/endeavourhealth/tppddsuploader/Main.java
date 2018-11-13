@@ -70,7 +70,7 @@ public class Main {
                     monitorRootDirectoryFiles (new File(rootDir), orgId, hookKey);
 
                     System.out.println("\nChecking for data upload files......\n");
-                    postSlackAlert("OrganisationId: "+orgId+" - Checking for data upload files......", hookKey, null);
+                    postSlackAlert("OrganisationId: "+orgId+" - Checking for data upload files ("+rootDir+")......", hookKey, null);
                     inputFolders = getUploadFileList(new File(rootDir),inputFiles);
                     break;
                 case UI_MODE:
