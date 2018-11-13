@@ -1,7 +1,7 @@
 ### Discovery Data Service - data uploader for client PCs
 
 ##### [install directory]
-`Typically c:\discovery-ftp\bin` 
+`Typically c:\dds-uploader\bin` 
 
 ##### [location of downloaded patch files]
 `[install directory]\bin\patch`
@@ -10,14 +10,14 @@
 `\run-tpp-dds.bat`
 
 ##### [patcher application - checks for and downloads patch files]
-`\bin\tpp-dds-patcher.jar [bucketname] [localdir]`
+`<jave path>/java -jar bin\tpp-dds-patcher.jar [bucketname] [localdir]`
 
 `[bucketname] - Amazon S3 bucket for patch files`
 
 `[localdir] - Local install directory for uploader app`
 
 ##### [data file uploader application - checks for and uploads data files]
-`\bin\tpp-dds-uploader.jar [mode] [rootdir] [hookkey] [username] [password] [orgId]`
+`<jave path>/java -jar bin\tpp-dds-uploader.jar [mode] [rootdir] [hookkey] [username] [pw] [orgId]`
 
 `[mode] - 0 = Auto file detect in [rootdir], no UI. 1 = File chooser UI mode, opens in [rootdir]`
 
@@ -27,12 +27,12 @@
 
 `[username] - Keycloak username`
 
-`[password] - Keycloak password`
+`[pw] - Keycloak password`
 
 `[orgId] - Data Publishing Organisation ODS code`
 
 ##### [location of data files for upload]
-`Typically c:\extract`
+`Typically c:\Apps\StrategicReporting\`
 
 ##### [location of archived uploaded data files]
 `[data file upload location]\archived`
