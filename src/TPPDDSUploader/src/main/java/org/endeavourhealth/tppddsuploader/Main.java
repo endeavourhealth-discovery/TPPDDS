@@ -121,7 +121,7 @@ public class Main {
                     ArrayList<Integer> intArray = new ArrayList<Integer>();
                     String folderName = inputFolder.getPath();
                     System.out.println("Checking file batch locations in folder:" + folderName + "\n");
-                    postSlackAlert("OrganisationId: "+orgId+" - checking file batch locations in folder: " + folderName, hookKey, null);
+                    postSlackAlert("OrganisationId: "+orgId+" - Checking file batch locations in folder: " + folderName, hookKey, null);
                     extractFileBatchLocations(inputFiles, folderName, intArray);
 
                     int start = intArray.get(0); int end = intArray.get(1);
