@@ -62,7 +62,7 @@ class HelperUtils {
         return true;
     }
 
-    static List<File> splitLargeZipFiles(List<File> inputFiles) {
+    static List<File> splitLargeZipFiles(List<File> inputFiles, String hookKey, String orgId) {
         List<File> outputFiles = new LinkedList<File>();
         for (File f : inputFiles) {
             if (!f.isDirectory()) {
@@ -71,19 +71,20 @@ class HelperUtils {
                         long fileSize = f.length();
                         if (fileSize > ZIP_SPLIT_SIZE) {
                             System.out.println("Large zip file found: " + f.getPath() + " (" + fileSize + " bytes). Extracting....");
+                            File bakFile = new File(f.getPath()+".bak");
+                            ZipFile outZipFile = new ZipFile(f.getPath());
+                            String fileName = f.getName();
+                            String zipFolder = f.getPath().substring(0, f.getPath().indexOf(fileName)) + "temp";
+
                             try {
-                                // extract existing large zip
                                 ZipFile inZipFile = new ZipFile(f.getPath());
-                                String fileName = f.getName();
-                                String zipFolder = f.getPath().substring(0, f.getPath().indexOf(fileName)) + "temp";
                                 inZipFile.extractAll(zipFolder);
 
-                                // delete large zip file
-                                f.delete();
+                                // rename original large zip
+                                f.renameTo(bakFile);
 
                                 // re-zip, this time splitting into multi part
                                 System.out.println("Re-zipping files over multiple split parts....");
-                                ZipFile outZipFile = new ZipFile(f.getPath());
                                 ZipParameters parameters = new ZipParameters();
                                 parameters.setCompressionMethod(Zip4jConstants.COMP_DEFLATE);
                                 parameters.setCompressionLevel(Zip4jConstants.DEFLATE_LEVEL_NORMAL);
@@ -98,10 +99,36 @@ class HelperUtils {
                                     outputFiles.add(new File(fileStr));
                                 }
 
-                                // remove source files
+                                // remove unzipped source files
                                 DeleteDirectory(zipFolder);
+
+                                // delete the source large zip file which was renamed as everything has worked
+                                bakFile.delete();
+
                             } catch (Exception ex) {
+
+                                // if there is an exception during zip file processing, we want to reset the original
+                                // files back and clean up any extracted files, and not attempt to upload this folder batch
                                 ex.printStackTrace();
+                                postSlackAlert("OrganisationId: "+orgId+" - Exception during large zip file processing",hookKey, ex.getMessage());
+
+                                // remove any multi-part files which have been created
+                                ArrayList<String> zipPartsToClear = outZipFile.getSplitZipFiles();
+                                if (zipPartsToClear != null) {
+                                    for (String fileStr : zipPartsToClear) {
+                                        new File(fileStr).delete();
+                                    }
+                                }
+
+                                // remove any unzipped source files
+                                DeleteDirectory(zipFolder);
+
+                                // return the original large zip file
+                                bakFile.renameTo(new File(f.getPath()));
+
+                                // remove all files for output and exit as this was a bulk zip attempt which failed
+                                outputFiles.clear();
+                                break;
                             }
                         }
                         else{
@@ -198,7 +225,7 @@ class HelperUtils {
     }
 
     //Get all files and sub-folders in the local Data directory for uploading, including the Archived folder
-    static List<File> getUploadFileList (File localDataDir, List<File> results)
+    static List<File> getUploadFileList (File localDataDir, List<File> results, String hookKey, String orgId)
     {
         List<File> fileBatch = new LinkedList<File>();
 
@@ -208,8 +235,12 @@ class HelperUtils {
         if(archivedFoldersFound != null) {
             for (File f : archivedFoldersFound) {
                 if (f.isDirectory() && f.listFiles()!= null) {
-                    results.addAll(splitLargeZipFiles(asList(f.listFiles())));
-                    fileBatch.add(f);
+
+                    List <File> folderFiles = splitLargeZipFiles(asList(f.listFiles()), hookKey, orgId);
+                    if (!folderFiles.isEmpty()) {
+                        results.addAll(folderFiles);
+                        fileBatch.add(f);
+                    }
                 }
             }
         }
@@ -225,7 +256,7 @@ class HelperUtils {
         if(filesFound != null) {
             for (File f: filesFound) {
                 if(f.isDirectory() && f.listFiles()!= null) {
-                    results.addAll(splitLargeZipFiles(asList(f.listFiles())));
+                    results.addAll(splitLargeZipFiles(asList(f.listFiles()), hookKey, orgId));
                     fileBatch.add(f);
                 }
             }
@@ -296,6 +327,15 @@ class HelperUtils {
         return display;
     }
 
+    static boolean folderContainsTempDir(File [] files) {
+        for (File f : files) {
+            if (f.isDirectory() && f.getName().equalsIgnoreCase("temp")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     static boolean checkValidUploadFiles(String orgId, File fileFolder, String hookKey)
     {
         // TPP client application as source - check number of files and structure of main zip
@@ -303,6 +343,15 @@ class HelperUtils {
         {
             int fileCount = countFiles (fileFolder, false);
             File [] folderFiles = fileFolder.listFiles();
+
+            boolean folderContainsTempDir = folderContainsTempDir(folderFiles);
+            if (folderContainsTempDir) {
+
+                File [] tempFolderFiles = new File(fileFolder.getPath().concat("\\temp")).listFiles();
+                System.out.println(String.format("Folder: %s contains a sub temp folder which will be handled as a future invalid batch",fileFolder.getPath()));
+                postSlackAlert("OrganisationId: "+orgId+" - "+ String.format("Folder: %s contains a sub temp folder which will be handled as a future invalid batch",fileFolder.getPath()), hookKey, fileListDisplay(tempFolderFiles));
+            }
+
             if (fileCount != 4)
             {
 
@@ -311,10 +360,15 @@ class HelperUtils {
                 return false;
             }
             else {
+
                 List<String> fileCheckArray = new ArrayList<String>(Arrays.asList("SRExtract.zip","SRManifest.csv","SRMapping.csv","SRMappingGroup.csv"));
-                //File [] folderFiles = fileFolder.listFiles();
                 for (File df : folderFiles)
                 {
+                    //ignore any sub directories, i.e. sub temp folders
+                    if (df.isDirectory()) {
+                        continue;
+                    }
+
                     int fileExtIndex = df.getName().lastIndexOf(".");
                     // check for non file extension
                     if (fileExtIndex == -1) {
@@ -337,6 +391,7 @@ class HelperUtils {
                     // validate zip file
                     if (df.getName().equalsIgnoreCase("SRExtract.zip"))
                     {
+
                         if (!validZipFile(df))
                         {
                             System.out.println(String.format("Invalid Zip file (%s) detected in folder: %s ",df.getName(),fileFolder.getPath()));
@@ -346,6 +401,7 @@ class HelperUtils {
                     }
                 }
             }
+
             return true;
         }
 
@@ -358,6 +414,11 @@ class HelperUtils {
         List<String> fileList = new ArrayList<String>();
         for (File f: folderFiles)
         {
+            //ignore sub directories in file count
+            if (f.isDirectory()) {
+                continue;
+            }
+
             String filePrefix = f.getName();
             int fileExtIndex = f.getName().lastIndexOf(".");
             if (fileExtIndex != -1) {
@@ -373,6 +434,11 @@ class HelperUtils {
 
     static void postSlackAlert(String message, String hookKey, String exceptionMessage)
     {
+        // do not log slack messages for the TPP test account
+        if (message.contains("TPP-01")) {
+            return;
+        }
+
         SlackMessage slackMessage = new SlackMessage(message);
 
         if (!Strings.isNullOrEmpty(exceptionMessage)) {

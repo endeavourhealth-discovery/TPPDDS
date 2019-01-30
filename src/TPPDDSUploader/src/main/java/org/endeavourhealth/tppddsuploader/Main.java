@@ -38,6 +38,7 @@ public class Main {
     private static final char DEFAULT_MODE = '0';
     private static final char UI_MODE = '1';
     private static final char TEST_MODE = '2';
+    private static final char DEBUG_FILE_MODE = '3';
     private static final int MAX_FILE_BATCH = 5;
 
     public static void main(String[] args) throws IOException {
@@ -71,7 +72,7 @@ public class Main {
 
                     System.out.println("\nChecking for data upload files......\n");
                     postSlackAlert("OrganisationId: "+orgId+" - Checking for data upload files ("+rootDir+")......", hookKey, null);
-                    inputFolders = getUploadFileList(new File(rootDir),inputFiles);
+                    inputFolders = getUploadFileList(new File(rootDir),inputFiles, hookKey, orgId);
                     break;
                 case UI_MODE:
                     JFileChooser fileChooser = new JFileChooser();
@@ -92,9 +93,19 @@ public class Main {
                     runTestMode (KEYCLOAK_SERVICE_URI, hookKey, username, password, orgId);
                     System.exit(0);
                     break;
+                case DEBUG_FILE_MODE:
+                    System.out.println("\nRunning in DEBUG_FILE_MODE\n");
+                    postSlackAlert("OrganisationId: "+orgId+" - Checking for data upload files ("+rootDir+")......", hookKey, null);
+                    postSlackAlert("OrganisationId: " + orgId + " - Running in DEBUG_FILE_MODE", hookKey, null);
+
+//                    File fileFolder = new File(rootDir.concat("\\Archived\\20190122_2300"));
+//                    inputFolders.add(fileFolder);
+//                    File tempFile = new File(rootDir.concat("\\Archived\\20190122_2300\\temp"));
+//                    inputFiles.add(tempFile);
+                    break;
                 default:
                     System.out.println("\nChecking for data upload files......\n");
-                    inputFolders = getUploadFileList(new File(rootDir),inputFiles);
+                    inputFolders = getUploadFileList(new File(rootDir),inputFiles, hookKey, orgId);
                     break;
             }
 
@@ -104,19 +115,19 @@ public class Main {
             // at least one file found or selected for uploading
             if (inputFiles.size() > 0) {
 
-                int validFiles = 0;
+                int validFileBatches = 0;
 
                 // loop through each valid folder (batch)
                 for (File inputFolder : inputFolders)
                 {
-                    // check validity of upload files based on orgId and batch
-                    if (!checkValidUploadFiles(orgId, inputFolder, hookKey)) {
+                    // check validity of upload files based on orgId and batch - default mode only
+                    if (mode == DEFAULT_MODE && !checkValidUploadFiles(orgId, inputFolder, hookKey)) {
 
                         invalidFolders.add(inputFolder);
                         continue;
                     }
 
-                    validFiles++;
+                    validFileBatches++;
 
                     ArrayList<Integer> intArray = new ArrayList<Integer>();
                     String folderName = inputFolder.getPath();
@@ -196,7 +207,11 @@ public class Main {
                         // delete source files after successful upload of this batch
                         String fileDetails = "";
                         if (statusCode == 200) {
-                            deleteSourceFiles(orgId, inputFiles.subList(from, to));
+
+                            //only delete source files in default mode
+                            if (mode == DEFAULT_MODE) {
+                                deleteSourceFiles(orgId, inputFiles.subList(from, to));
+                            }
                             System.out.println("\nTransfer completed successfully at " + new Date().toString() + "\n");
 
                             fileDetails = " - " + inputFiles.subList(from, to).toString();
@@ -210,8 +225,8 @@ public class Main {
                     }while (from < end);
                 }
 
-                //if none of the input files are valid, set alert
-                if (validFiles == 0) {
+                //if none of the input file batches are valid, set alert
+                if (validFileBatches == 0) {
                     postSlackAlert("OrganisationId: "+orgId+" - 0 valid data upload files found.", hookKey, null);
                 }
 
