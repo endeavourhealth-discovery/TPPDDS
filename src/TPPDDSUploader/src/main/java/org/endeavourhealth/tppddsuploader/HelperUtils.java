@@ -74,7 +74,13 @@ class HelperUtils {
                             File bakFile = new File(f.getPath()+".bak");
                             ZipFile outZipFile = new ZipFile(f.getPath());
                             String fileName = f.getName();
-                            String zipFolder = f.getPath().substring(0, f.getPath().indexOf(fileName)) + "temp";
+
+                            String currentFolder = f.getPath().substring(0, f.getPath().indexOf(fileName));
+                            String zipFolder = currentFolder + "temp";
+
+                            //list all the current files in the large zip folder for debug, i.e. any existing multi-part files already?
+                            File [] folderFiles = new File(currentFolder).listFiles();
+                            postSlackAlert("OrganisationId: "+orgId+" - Large zip file found in directory: "+currentFolder, hookKey, fileListDisplay(folderFiles));
 
                             try {
                                 ZipFile inZipFile = new ZipFile(f.getPath());
