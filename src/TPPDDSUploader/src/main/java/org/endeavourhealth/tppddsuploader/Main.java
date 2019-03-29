@@ -97,11 +97,6 @@ public class Main {
                     System.out.println("\nRunning in DEBUG_FILE_MODE\n");
                     postSlackAlert("OrganisationId: "+orgId+" - Checking for data upload files ("+rootDir+")......", hookKey, null);
                     postSlackAlert("OrganisationId: " + orgId + " - Running in DEBUG_FILE_MODE", hookKey, null);
-
-//                    File fileFolder = new File(rootDir.concat("\\Archived\\20190122_2300"));
-//                    inputFolders.add(fileFolder);
-//                    File tempFile = new File(rootDir.concat("\\Archived\\20190122_2300\\temp"));
-//                    inputFiles.add(tempFile);
                     break;
                 default:
                     System.out.println("\nChecking for data upload files......\n");
