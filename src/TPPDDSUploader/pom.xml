@@ -71,12 +71,12 @@
         <dependency>
             <groupId>org.endeavourhealth.common</groupId>
             <artifactId>security</artifactId>
-            <version>1.2-SNAPSHOT</version>
+            <version>1.16-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>org.keycloak</groupId>
             <artifactId>keycloak-core</artifactId>
-            <version>3.0.0.Final</version>
+            <version>4.8.3.Final</version>
         </dependency>
     </dependencies>
 

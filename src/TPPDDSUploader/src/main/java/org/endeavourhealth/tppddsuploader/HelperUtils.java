@@ -29,7 +29,8 @@ class HelperUtils {
     private static final long ZIP_SPLIT_SIZE = 10485760;
 
     // add in publishing service ODS code here.  The first one is the DDS test service.
-    private static final String TPP_ORGS = "TPP-01,F86638,B86071,B86022,YDDH3,YDDH3_09A,YDDH3_08C,YDDH3_08Y";
+    private static final String TPP_ORGS
+            = "TPP-01,F86638,YDDH3,YDDH3_09A,YDDH3_08C,YDDH3_08Y,YDDH3_07Y_FHH,YDDH3_07Y_GWR,YDDH3_07W_N,YDDH3_07W_S";
 
     private static boolean validZipFile(File zipFile)
     {
