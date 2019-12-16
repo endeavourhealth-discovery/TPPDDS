@@ -83,7 +83,7 @@ public class Main {
                     int result = fileChooser.showOpenDialog(null);
                     if (result == JFileChooser.APPROVE_OPTION) {
                         inputFiles = asList(fileChooser.getSelectedFiles());
-                        rootDir = fileChooser.getCurrentDirectory().getPath()+"\\";
+                        //rootDir = fileChooser.getCurrentDirectory().getPath()+"\\";
                         inputFolders.add(new File(rootDir));
                         //TODO: process selected files and zip to multi-zip if large
                     } else
