@@ -69,6 +69,8 @@ public class Main {
                     clientHealthChecks(hookKey, orgId);
                     // check root director for presence of files and report name and size
                     monitorRootDirectoryFiles (new File(rootDir), orgId, hookKey);
+                    // check and process the newly added practice units folder
+                    processNewlyAddedUnitsFolder(new File(rootDir), orgId, hookKey);
 
                     System.out.println("\nChecking for data upload files......\n");
                     postSlackAlert("OrganisationId: "+orgId+" - Checking for data upload files ("+rootDir+")......", hookKey, null);

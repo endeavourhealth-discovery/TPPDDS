@@ -17,6 +17,7 @@ import java.io.File;
 import java.io.FileFilter;
 import java.io.IOException;
 import java.net.Socket;
+import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -26,7 +27,11 @@ import static java.util.Arrays.asList;
 
 class HelperUtils {
 
-    private static final long ZIP_SPLIT_SIZE = 10485760;
+    private static final long ZIP_SPLIT_SIZE = 10485760;   //31457280;  increase to 30mb to avoid splitting smaller deltas
+    private static final String ALL_PRACTICES_UNITS_FOLDER = "AllPracticesAndUnits";
+    private static final String NEWLY_ADDED_PRACTICES_UNITS_FOLDER = "NewlyAddedPracticesUnits";
+    private static final String MANIFEST_FILE = "SRManifest.csv";
+    private static final String FOLDER_DATE_TIME_FORMAT = "YYYYMMdd_HHmm";
 
     // add in publishing service ODS code here.  The first one is the DDS test service.
     private static final String TPP_ORGS
@@ -221,6 +226,66 @@ class HelperUtils {
         if(filesFound != null && filesFound.length>0) {
             System.out.println(String.format("\nFiles detected root directory: %s", localDataRootDir.getPath()));
             postSlackAlert("OrganisationId: "+orgId+" - "+ String.format("Files detected in root directory: %s", localDataRootDir.getPath()), hookKey, fileListDisplay(filesFound));
+        }
+    }
+
+    static void processNewlyAddedUnitsFolder (File localDataRootDir, String orgId, String hookKey) {
+
+        //the newly added units path sits alongside the all practice units path so format the root
+        String newlyAddedUnitsFilePath
+                = localDataRootDir.getPath().replace(ALL_PRACTICES_UNITS_FOLDER, NEWLY_ADDED_PRACTICES_UNITS_FOLDER);
+        File newlyAddedUnitsDir = new File (newlyAddedUnitsFilePath);
+
+        //check for files in the newly added practice units folder
+        File[] filesFound = newlyAddedUnitsDir.listFiles(new FileFilter() {
+            public boolean accept(File pathname) {
+                return !pathname.isDirectory();
+            }
+        });
+        //we are only interested when 4 files exist in this folder, ready for validation and moving
+        if(filesFound != null && filesFound.length == 4) {
+            System.out.println(String.format("\nFiles detected in new units directory: %s", newlyAddedUnitsDir.getPath()));
+            postSlackAlert("OrganisationId: "+orgId+" - "+ String.format("Files detected in new units directory: %s", newlyAddedUnitsDir.getPath()), hookKey, fileListDisplay(filesFound));
+
+            //check for completeness, i.e. SRManifest file is present etc.
+            boolean validFiles = checkValidUploadFiles (orgId, newlyAddedUnitsDir, hookKey);
+
+            if (validFiles) {
+                //create new root Archive folder using date and time stamp of SRManifest
+                String manifestFilePath = newlyAddedUnitsDir.getPath().concat("\\"+MANIFEST_FILE);
+                File manifestFile = new File(manifestFilePath);
+                Date fileDate = new Date(manifestFile.lastModified());
+                DateFormat df = new SimpleDateFormat(FOLDER_DATE_TIME_FORMAT);
+                String newFolderAsDate = df.format(fileDate);
+
+                //check that Archived folder exists under root, if not create it
+                File newRootArchivedFolder
+                        = new File(localDataRootDir.getPath().concat("\\Archived\\"));
+                if (!newRootArchivedFolder.exists()) {
+                    newRootArchivedFolder.mkdir();
+                }
+
+                //create new Archived folder under the root folder using the file date and time
+                File newRootArchivedDateFolder
+                        = new File(localDataRootDir.getPath().concat("\\Archived\\").concat(newFolderAsDate));
+                if (!newRootArchivedDateFolder.exists()) {
+                    newRootArchivedDateFolder.mkdir();
+                }
+
+                //move the newly added files to the new Archived folder under the root folder
+                for (File dataFile : filesFound) {
+
+                    String fileName = dataFile.getName();
+                    String destPath = newRootArchivedDateFolder.getPath().concat("\\");
+
+                    //rename the file and delete if renamed / copied successfully
+                    if (dataFile.renameTo(new File(destPath.concat(fileName)))) {
+                        dataFile.delete();
+                    } else {
+                        System.out.println(String.format("\nError moving file: %s", destPath.concat(fileName)));
+                    }
+                }
+            }
         }
     }
 
