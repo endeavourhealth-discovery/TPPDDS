@@ -122,7 +122,7 @@ class HelperUtils {
                                 // if there is an exception during zip file processing, we want to reset the original
                                 // files back and clean up any extracted files, and not attempt to upload this folder batch
                                 ex.printStackTrace();
-                                postSlackAlert("OrganisationId: "+orgId+" - Exception during large zip file processing",hookKey, ex.getMessage());
+                                postSlackAlert("OrganisationId: "+orgId+" - Exception during large zip file processing so terminating process",hookKey, ex.getMessage());
 
                                 // remove any multi-part files which have been created
                                 ArrayList<String> zipPartsToClear = outZipFile.getSplitZipFiles();
@@ -140,6 +140,10 @@ class HelperUtils {
 
                                 // remove all files for output and exit as this was a bulk zip attempt which failed
                                 outputFiles.clear();
+
+                                // terminate the current process for organisation to prevent any subsequent
+                                // newer files being uploaded before this large zip
+                                System.exit(99);
                                 break;
                             }
                         }
