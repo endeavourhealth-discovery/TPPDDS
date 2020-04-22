@@ -35,7 +35,7 @@ class HelperUtils {
 
     // add in publishing service ODS code here.  The first one is the DDS test service.
     private static final String TPP_ORGS
-            = "TPP-01,YDDH3,YDDH3_09A,YDDH3_08C,YDDH3_08Y,YDDH3_07Y_FHH,YDDH3_07Y_GWR,YDDH3_07W_N,YDDH3_07W_S,YDDH3_08W,YDDH3_07L,YDDH3_08N,YDDH3_08Y_2";
+            = "TPP-01,YDDH3,YDDH3_09A,YDDH3_08C,YDDH3_08Y,YDDH3_07Y_FHH,YDDH3_07Y_GWR,YDDH3_07W_N,YDDH3_07W_S,YDDH3_08W,YDDH3_07L,YDDH3_08N,YDDH3_08Y_2,YDDH3_RYJ1";
 
     private static boolean validZipFile(File zipFile)
     {
