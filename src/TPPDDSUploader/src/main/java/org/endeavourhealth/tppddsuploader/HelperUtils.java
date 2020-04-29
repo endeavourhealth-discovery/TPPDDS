@@ -29,7 +29,9 @@ class HelperUtils {
 
     private static final long ZIP_SPLIT_SIZE = 10485760;   //31457280;  increase to 30mb to avoid splitting smaller deltas
     private static final String ALL_PRACTICES_UNITS_FOLDER = "AllPracticesAndUnits";
+    private static final String ALL_COMMUNITY_UNITS_FOLDER = "AllCommunityUnits";
     private static final String NEWLY_ADDED_PRACTICES_UNITS_FOLDER = "NewlyAddedPracticesUnits";
+    private static final String NEWLY_ADDED_COMMUNITY_UNITS_FOLDER = "NewlyAddedCommunityUnits";
     private static final String MANIFEST_FILE = "SRManifest.csv";
     private static final String FOLDER_DATE_TIME_FORMAT = "YYYYMMdd_HHmm";
 
@@ -236,8 +238,18 @@ class HelperUtils {
     static void processNewlyAddedUnitsFolder (File localDataRootDir, String orgId, String hookKey) {
 
         //the newly added units path sits alongside the all practice units path so format the root
-        String newlyAddedUnitsFilePath
-                = localDataRootDir.getPath().replace(ALL_PRACTICES_UNITS_FOLDER, NEWLY_ADDED_PRACTICES_UNITS_FOLDER);
+        //depending on the file path name, i.e. GP practice or community units?
+        String newlyAddedUnitsFilePath = "";
+        if (localDataRootDir.getPath().contains(ALL_PRACTICES_UNITS_FOLDER)) {
+            newlyAddedUnitsFilePath
+                    = localDataRootDir.getPath().replace(ALL_PRACTICES_UNITS_FOLDER, NEWLY_ADDED_PRACTICES_UNITS_FOLDER);
+
+        } else if (localDataRootDir.getPath().contains(ALL_COMMUNITY_UNITS_FOLDER)) {
+            newlyAddedUnitsFilePath
+                    = localDataRootDir.getPath().replace(ALL_COMMUNITY_UNITS_FOLDER, NEWLY_ADDED_COMMUNITY_UNITS_FOLDER);
+        } else {
+            return;
+        }
         File newlyAddedUnitsDir = new File (newlyAddedUnitsFilePath);
 
         //check for files in the newly added practice units folder
