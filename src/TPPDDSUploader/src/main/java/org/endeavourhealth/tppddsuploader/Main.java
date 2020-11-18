@@ -137,6 +137,10 @@ public class Main {
                     System.out.println("\n" + fileCount + " valid data upload files found in " + folderName + "\n");
                     postSlackAlert("OrganisationId: "+orgId+" - "+fileCount + " valid data upload files found in " + folderName, hookKey, null);
 
+                    //set the retry limit to 5 https requests. if this drops to 0 for a file batch the process
+                    //will terminate for that organisation to prevent any further files being upload attempted
+                    int httpsRetriesAllowed = 5;
+
                     //Loop through files in folder, uploading 5 files per time, per batch folder
                     do
                     {
@@ -199,10 +203,11 @@ public class Main {
                         // logout the Keycloak token session when finished
                         KeycloakClient.instance().logoutSession();
 
-                        System.out.println("[" + statusCode + "] " + responseString);
+                        //System.out.println("[" + statusCode + "] " + responseString);
 
-                        // delete source files after successful upload of this batch
-                        String fileDetails = "";
+                        // depending on the https status, delete source files after successful upload of this batch
+                        // a status of 200 means success. anything else, either retry or exit the process
+                        String fileDetails = " - " + inputFiles.subList(from, to).toString();
                         if (statusCode == 200) {
 
                             //only delete source files in default mode
@@ -210,14 +215,30 @@ public class Main {
                                 deleteSourceFiles(orgId, inputFiles.subList(from, to));
                             }
                             System.out.println("\nTransfer completed successfully at " + new Date().toString() + "\n");
-
-                            fileDetails = " - " + inputFiles.subList(from, to).toString();
+                            postSlackAlert("Transfer successful for organisationId="+orgId+" : ["+statusCode+"] "+responseString + fileDetails, hookKey, null);
                         } else {
-                            System.out.println("\nTransfer failed at " + new Date().toString() + "\n");
+
+                            //retry from the same point (from) here if the https transfer failed and retry limit not reached
+                            if (httpsRetriesAllowed > 0) {
+
+                                //use up a retry attempt and continue / retry with current batch
+                                httpsRetriesAllowed--;
+                                System.out.println("\nTransfer failed at " + new Date().toString() + ". Retrying batch... \n");
+                                postSlackAlert("Transfer failed for organisationId="+orgId+" : ["+statusCode+"] "+responseString + fileDetails + ". Retrying batch...", hookKey, null);
+                                continue;
+                            } else {
+
+                                System.out.println("\nTransfer failed at " + new Date().toString() + ". Retry limit reached. Exiting process for organisation \n");
+                                postSlackAlert("Transfer failed for organisationId="+orgId+" : ["+statusCode+"] "+responseString + fileDetails + ". Retry limit reached. Exiting process for organisation", hookKey, null);
+                                System.exit(99);
+                                break;
+                            }
                         }
 
-                        postSlackAlert("Transfer status for organisationId="+orgId+" : ["+statusCode+"] "+responseString + fileDetails, hookKey, null);
+                        //successful batch upload so reset the retry limit back to 5 for the next batch of files
+                        httpsRetriesAllowed = 5;
 
+                        //then move the from pointer to the next set of files in the overall batch list
                         from = to;
                     }while (from < end);
                 }
