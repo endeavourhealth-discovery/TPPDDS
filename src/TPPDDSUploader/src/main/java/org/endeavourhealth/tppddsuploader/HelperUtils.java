@@ -12,6 +12,7 @@ import net.lingala.zip4j.model.ZipParameters;
 import net.lingala.zip4j.util.Zip4jConstants;
 import org.apache.http.Header;
 import org.endeavourhealth.common.security.keycloak.client.KeycloakClient;
+import org.keycloak.representations.idm.UserRepresentation;
 
 import java.io.File;
 import java.io.FileFilter;
@@ -182,7 +183,7 @@ class HelperUtils {
             DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyyMMdd");   //ensure no time element
             Date dateThreeMonthsAgo = new SimpleDateFormat("yyyyMMdd").parse(dtf.format(threeMonthsAgo));
 
-            //if the folder date is older than two months then delete
+            //if the folder date is older than three months then delete
             if (dateThreeMonthsAgo.after(folderDate)) {
                 DeleteDirectory(folderPath);
                 System.out.println(String.format("Invalid files folder older than three months: %s has been deleted ", folderPath));
@@ -353,7 +354,7 @@ class HelperUtils {
         return fileBatch;
     }
 
-    static boolean clientHealthChecks(String hookKey, String orgId)
+    static boolean clientHealthChecks(String hookKey, String orgId, String username, String password, String keycloakURI) throws IOException
     {
         if (orgId.isEmpty())
             return true;
@@ -371,6 +372,7 @@ class HelperUtils {
             {
                 System.out.println("Unable to connect to port 40700. Trying port 2135...");
                 postSlackAlert("OrganisationId: "+orgId+" - Unable to connect to port 40700. Trying port 2135...", hookKey, null);
+                postSlackAlertProd("OrganisationId: "+orgId+" - Unable to connect to port 40700. Trying port 2135...", null, username, password, keycloakURI);
                 try
                 {
                     (new Socket("localhost", 2135)).close();
@@ -380,6 +382,7 @@ class HelperUtils {
                 {
                     System.out.println("Unable to connect to port 2135.  TPP client application not running.");
                     postSlackAlert("OrganisationId: "+orgId+" - Unable to connect to port 2135.  TPP client application not running.", hookKey, null);
+                    postSlackAlertProd("OrganisationId: "+orgId+" - Unable to connect to port 2135.  TPP client application not running.", null, username, password, keycloakURI);
                     return false;
                 }
             }
@@ -520,6 +523,7 @@ class HelperUtils {
         return fileList.size();
     }
 
+    //posts to the dds-uploader-alerts channel
     static void postSlackAlert(String message, String hookKey, String exceptionMessage)
     {
         // do not log slack messages for the TPP test account
@@ -548,14 +552,59 @@ class HelperUtils {
         }
     }
 
+    //posts to the aws-production-alerts channel
+    static void postSlackAlertProd(String message, String exceptionMessage, String username, String password, String keycloakURI) throws IOException
+    {
+        // do not log slack messages for the TPP test account
+//        if (message.contains("TPP-01")) {
+//            return;
+//        }
+
+        SlackMessage slackMessage = new SlackMessage(message);
+
+        if (!Strings.isNullOrEmpty(exceptionMessage)) {
+            SlackAttachment slackAttachment = new SlackAttachment();
+            slackAttachment.setFallback("Exception cannot be displayed");
+            slackAttachment.setText("```" + exceptionMessage + "```");
+            slackAttachment.addMarkdownAttribute("text");
+            slackMessage.addAttachments(slackAttachment);
+        }
+
+        //generate a security token to get the webhook-ddsuploaderalertprod attribute
+        UserRepresentation userRep = getKeycloakTokenUserRep(keycloakURI, username, password);
+        if (!userRep.getAttributes().isEmpty()) {
+
+            Map<String, List<String>> attributes = userRep.getAttributes();
+            List<String> webhook = attributes.get("webhook-ddsuploaderalertprod");
+            if (!webhook.isEmpty()) {
+
+                String url = webhook.get(0);
+                try {
+                    SlackApi slackApi = new SlackApi(url);
+                    slackApi.call(slackMessage);
+                }
+                catch (SlackException ex) {
+                    System.out.println ("\nSlack integration failure. Unable to create alert => "+ex.getMessage());
+                }
+            }
+        }
+    }
+
     static Header getKeycloakToken(String keycloakURI, String username, String password) throws IOException
     {
         KeycloakClient.init(keycloakURI, "endeavour-machine", username, password, "dds-api");
         return KeycloakClient.instance().getAuthorizationHeader();
     }
 
-    static void runTestMode (String keycloakURI, String hookKey, String username, String password, String orgId) {
+    static UserRepresentation getKeycloakTokenUserRep(String keycloakURI, String username, String password) throws IOException
+    {
+        KeycloakClient.init(keycloakURI, "endeavour-machine", username, password, "dds-api");
+        return KeycloakClient.instance().getUserAccount();
+    }
+
+    static void runTestMode (String keycloakURI, String hookKey, String username, String password, String orgId) throws IOException {
         System.out.println("\nEntering test mode......\n");
+
         System.out.println("\n(1) Authentication test....");
         try {
             String token = getKeycloakToken(keycloakURI, username, password).getValue();
@@ -563,8 +612,14 @@ class HelperUtils {
         } catch (Exception ex) {
             System.out.println("\nAuthentication failed => "+ex.getMessage());
         }
+//
+//        System.out.println("\n(2) Slack alerts test to dds-uploader-alerts channel....\n");
+//        postSlackAlert("Test alert for OrganisationId = "+orgId, hookKey, null);
 
-        System.out.println("\n(2) Slack alerts test....\n");
-        postSlackAlert("Test alert for OrganisationId = "+orgId, hookKey, null);
+//        System.out.println("\n(3) Slack alerts test to aws-production-alerts channel....\n");
+//        postSlackAlertProd("Test alert for OrganisationId = "+orgId, null, username, password, keycloakURI);
+
+        System.out.println("\n(4) Performing TPP client health checks....\n");
+        clientHealthChecks(hookKey, orgId, username, password, keycloakURI);
     }
 }

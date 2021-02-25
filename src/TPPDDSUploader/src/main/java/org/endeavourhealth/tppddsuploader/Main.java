@@ -66,7 +66,7 @@ public class Main {
             switch (mode) {
                 case DEFAULT_MODE:
                     // run health checks specific to org
-                    clientHealthChecks(hookKey, orgId);
+                    clientHealthChecks(hookKey, orgId, username, password, KEYCLOAK_SERVICE_URI);
                     // check root director for presence of files and report name and size
                     monitorRootDirectoryFiles (new File(rootDir), orgId, hookKey);
                     // check and process the newly added practice units folder
