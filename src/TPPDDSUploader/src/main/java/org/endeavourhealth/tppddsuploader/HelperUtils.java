@@ -18,6 +18,7 @@ import java.io.File;
 import java.io.FileFilter;
 import java.io.IOException;
 import java.net.Socket;
+import java.net.URISyntaxException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
@@ -34,11 +35,30 @@ class HelperUtils {
     private static final String NEWLY_ADDED_PRACTICES_UNITS_FOLDER = "NewlyAddedPracticesUnits";
     private static final String NEWLY_ADDED_COMMUNITY_UNITS_FOLDER = "NewlyAddedCommunityUnits";
     private static final String MANIFEST_FILE = "SRManifest.csv";
-    private static final String FOLDER_DATE_TIME_FORMAT = "YYYYMMdd_HHmm";
+    private static final String FOLDER_DATE_TIME_FORMAT = "yyyyMMdd_HHmm";
 
     // add in publishing service ODS code here.  The first one is the DDS test service.
     private static final String TPP_ORGS
-            = "TPP-01,YDDH3,YDDH3_09A,YDDH3_08C,YDDH3_08Y,YDDH3_07Y_FHH,YDDH3_07Y_GWR,YDDH3_07W_N,YDDH3_07W_S,YDDH3_08W,YDDH3_07L,YDDH3_08N,YDDH3_08Y_2,YDDH3_RYJ1,W2U3Z_HHEA01";
+            = "TPP-01,"
+            + "YDDH3,"
+            + "YDDH3_09A,"
+            + "YDDH3_08C,"
+            + "YDDH3_08Y,"
+            + "YDDH3_07Y_FHH,"
+            + "YDDH3_07Y_GWR,"
+            + "YDDH3_07W_N,"
+            + "YDDH3_07W_S,"
+            + "YDDH3_08W,"
+            + "YDDH3_07L,"
+            + "YDDH3_08N,"
+            + "YDDH3_08Y_2,"
+            + "YDDH3_RYJ1,"
+            + "W2U3Z_HHEA01,"
+            + "YDDH3_RYX,"
+            + "YDDH3_RV3,"
+            + "YDDH3_R1K,"
+            + "YDDH3_RKL,"
+            + "YDDH3_RY9";
 
     private static boolean validZipFile(File zipFile)
     {
@@ -230,9 +250,54 @@ class HelperUtils {
                 return !pathname.isDirectory();
             }
         });
-        if(filesFound != null && filesFound.length>0) {
-            System.out.println(String.format("\nFiles detected root directory: %s", localDataRootDir.getPath()));
-            postSlackAlert("OrganisationId: "+orgId+" - "+ String.format("Files detected in root directory: %s", localDataRootDir.getPath()), hookKey, fileListDisplay(filesFound));
+        if(filesFound != null && filesFound.length == 4) {
+            System.out.println(String.format("\nValidating 4 files detected root directory: %s", localDataRootDir.getPath()));
+            postSlackAlert("OrganisationId: "+orgId+" - "+ String.format("Validating 4 files detected in root directory: %s", localDataRootDir.getPath()), hookKey, fileListDisplay(filesFound));
+
+            //check for completeness, i.e. SRManifest file is present etc.
+            boolean validFiles = checkValidUploadFiles (orgId, localDataRootDir, hookKey);
+
+            if (validFiles) {
+                //get date and time stamp of SRManifest if it exists (which it should based on the validation check prior)
+                String manifestFilePath = localDataRootDir.getPath().concat("\\" + MANIFEST_FILE);
+                File manifestFile = new File(manifestFilePath);
+                if (manifestFile.exists()) {
+
+                    Date fileDate = new Date(manifestFile.lastModified());
+                    DateFormat df = new SimpleDateFormat(FOLDER_DATE_TIME_FORMAT);
+                    String newFolderAsDateTime = df.format(fileDate);
+
+                    postSlackAlert("OrganisationId: " + orgId + " - " + String.format("Moving the 4 valid files from root to Archive folder: %s", newFolderAsDateTime), hookKey, null);
+
+                    //check that Archived folder exists under root, if not create it
+                    File newRootArchivedFolder
+                            = new File(localDataRootDir.getPath().concat("\\Archived\\"));
+                    if (!newRootArchivedFolder.exists()) {
+                        newRootArchivedFolder.mkdir();
+                    }
+
+                    //create new Archived folder under the root folder using the file date and time obtained from the SRManifest
+                    File newRootArchivedDateFolder
+                            = new File(localDataRootDir.getPath().concat("\\Archived\\").concat(newFolderAsDateTime));
+                    if (!newRootArchivedDateFolder.exists()) {
+                        newRootArchivedDateFolder.mkdir();
+                    }
+
+                    //move the 4 newly created files to the new Archived folder under the root folder
+                    for (File dataFile : filesFound) {
+
+                        String fileName = dataFile.getName();
+                        String destPath = newRootArchivedDateFolder.getPath().concat("\\");
+
+                        //rename the file and delete if renamed / copied successfully
+                        if (dataFile.renameTo(new File(destPath.concat(fileName)))) {
+                            dataFile.delete();
+                        } else {
+                            System.out.println(String.format("\nError moving file: %s", destPath.concat(fileName)));
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -273,7 +338,7 @@ class HelperUtils {
                 File manifestFile = new File(manifestFilePath);
                 Date fileDate = new Date(manifestFile.lastModified());
                 DateFormat df = new SimpleDateFormat(FOLDER_DATE_TIME_FORMAT);
-                String newFolderAsDate = df.format(fileDate);
+                String newFolderAsDateTime = df.format(fileDate);
 
                 //check that Archived folder exists under root, if not create it
                 File newRootArchivedFolder
@@ -284,7 +349,7 @@ class HelperUtils {
 
                 //create new Archived folder under the root folder using the file date and time
                 File newRootArchivedDateFolder
-                        = new File(localDataRootDir.getPath().concat("\\Archived\\").concat(newFolderAsDate));
+                        = new File(localDataRootDir.getPath().concat("\\Archived\\").concat(newFolderAsDateTime));
                 if (!newRootArchivedDateFolder.exists()) {
                     newRootArchivedDateFolder.mkdir();
                 }
@@ -354,7 +419,7 @@ class HelperUtils {
         return fileBatch;
     }
 
-    static boolean clientHealthChecks(String hookKey, String orgId, String username, String password, String keycloakURI) throws IOException
+    static boolean clientHealthChecks(String hookKey, String orgId, String username, String password, String keycloakURI) throws Exception
     {
         if (orgId.isEmpty())
             return true;
@@ -362,7 +427,10 @@ class HelperUtils {
         // TPP client application as source - check TCP ports to denote application running
         if (TPP_ORGS.contains(orgId))
         {
-            System.out.println("Performing TPP client checks......\n");
+            //get file modified date for slack alert
+            String runningAppVersionDate = getRunningAppModfiedDate();
+            System.out.println("Performing TPP client checks, jar version: "+runningAppVersionDate+"......\n");
+            postSlackAlert("OrganisationId: "+orgId+" - Performing TPP client checks, jar version: "+runningAppVersionDate+"......", hookKey, null);
             try
             {
                 (new Socket("localhost", 40700)).close();
@@ -411,6 +479,11 @@ class HelperUtils {
         String display = "";
 
         for (File f : files) {
+
+            //ignore folders when displaying file lists
+            if (f.isDirectory()) {
+                continue;
+            }
             long sizeKb = f.length() / 1024;
             display = display.concat(f.getName() + " : " + Long.toString(sizeKb) +  " kb\n");
         }
@@ -527,9 +600,9 @@ class HelperUtils {
     static void postSlackAlert(String message, String hookKey, String exceptionMessage)
     {
         // do not log slack messages for the TPP test account
-        if (message.contains("TPP-01")) {
-            return;
-        }
+//        if (message.contains("TPP-01")) {
+//            return;
+//        }
 
         SlackMessage slackMessage = new SlackMessage(message);
 
@@ -556,9 +629,9 @@ class HelperUtils {
     static void postSlackAlertProd(String message, String exceptionMessage, String username, String password, String keycloakURI) throws IOException
     {
         // do not log slack messages for the TPP test account
-//        if (message.contains("TPP-01")) {
-//            return;
-//        }
+        if (message.contains("TPP-01")) {
+            return;
+        }
 
         SlackMessage slackMessage = new SlackMessage(message);
 
@@ -602,7 +675,7 @@ class HelperUtils {
         return KeycloakClient.instance().getUserAccount();
     }
 
-    static void runTestMode (String keycloakURI, String hookKey, String username, String password, String orgId) throws IOException {
+    static void runTestMode (String keycloakURI, String hookKey, String username, String password, String orgId) throws Exception {
         System.out.println("\nEntering test mode......\n");
 
         System.out.println("\n(1) Authentication test....");
@@ -621,5 +694,13 @@ class HelperUtils {
 
         System.out.println("\n(4) Performing TPP client health checks....\n");
         clientHealthChecks(hookKey, orgId, username, password, keycloakURI);
+    }
+
+    static String getRunningAppModfiedDate() throws Exception {
+        Date runningAppLastModifiedDate
+                = new Date(new File(Main.class.getProtectionDomain().getCodeSource().getLocation()
+                .toURI()).lastModified());
+        DateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        return df.format(runningAppLastModifiedDate);
     }
 }
